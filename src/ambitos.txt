@@ -1,0 +1,11 @@
+Línea 1 ---> ÁMBITO 0 SE HA CREADO.
+Línea 4 ---> ÁMBITO 1 SE HA CREADO.
+Línea 5 ---> ÁMBITO 2 SE HA CREADO.
+Línea 10 ---> ÁMBITO 2 HA SALIDO.
+Línea 15 ---> ÁMBITO 1 HA SALIDO.
+Línea 17 ---> ÁMBITO 3 SE HA CREADO.
+Línea 18 ---> ÁMBITO 4 SE HA CREADO.
+Línea 23 ---> ÁMBITO 4 HA SALIDO.
+Línea 24 ---> ÁMBITO 5 SE HA CREADO.
+Línea 33 ---> ÁMBITO 5 HA SALIDO.
+Línea 37 ---> ÁMBITO 3 HA SALIDO.
