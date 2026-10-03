@@ -52,7 +52,10 @@ public class Sintaxis {
     
     private boolean insertandoPrefijo = false;
     private Stack<Token> pilaPrefijo, pilaOperadores;
-    private Stack<List<Token>> pilaOperandos;
+    private Stack<Token> pilaOperandos;
+    private Compatibilidad compatibilidad;
+    private int[] contadoresTemporales = new int[9];
+    private List<String> cuadruplos = new LinkedList<>();
     Token tokenAsignado, tokenIgual;
     
     private HashMap<Integer, Integer> erroresAmbitos;
@@ -555,7 +558,8 @@ public class Sintaxis {
         pilaSintactica = new Stack<>();
         pilaAmbitos = new Stack<>();
         pilaPrefijo = new Stack<>();
-        pilaOperandos = new Stack<List<Token>>();
+        pilaOperandos = new Stack<>();
+        compatibilidad = new Compatibilidad();
         pilaOperadores = new Stack<>();
         
         pilaAmbitos.add(contadorAmbitos);
@@ -921,11 +925,7 @@ public class Sintaxis {
                     listaErrores.add(new Error(540, tokenActual.getLinea(), tokenActual.getLexema(), TipoError.AMBITO));
                 }
                 if(insertandoPrefijo){
-                    List<Token> hoja = new LinkedList<>();
-                    hoja.add(tokenActual);
-                    pilaOperandos.push(hoja);
-                    //pilaPrefijo.push(tokenActual);
-                    //System.out.println("Se ha insertado el operando " + tokenActual.getLexema());
+                    pilaOperandos.push(tokenActual);
                 }else{
                     tokenAsignado = tokenActual;
                 }
@@ -935,34 +935,26 @@ public class Sintaxis {
                 
             }else if(topePila == 812){ //ACTIVAR ZONA DE INFIJO A PREFIJO
                 insertandoPrefijo = true;
-                
-                
+                pilaOperandos.clear();
+                pilaOperadores.clear();
+                cuadruplos.clear();
                 pilaSintactica.pop();
             }else if(topePila == 813){ //DESACTIVAR ZONA DE INFIJO A POSTFIJO
                 insertandoPrefijo = false;
 
                 if(!pilaOperandos.isEmpty()){
-                    List<Token> expresion = pilaOperandos.pop();
+                    Token resultado = pilaOperandos.pop();
 
-                    List<Token> completa = new LinkedList<>();
-                    completa.add(tokenIgual);
-                    completa.add(tokenAsignado);
-                    completa.addAll(expresion);
-
-                    StringBuilder sb = new StringBuilder();
-                    for(Token t : completa){
-                        sb.append(t.getLexema()).append(" ");
+                    prefijoWriter.write("Linea " + tokenAsignado.getLinea() + ":");
+                    prefijoWriter.newLine();
+                    for(String cuadruplo: cuadruplos){
+                        prefijoWriter.write(cuadruplo);
+                        prefijoWriter.newLine();
                     }
-                    
-                    System.out.println("Ultimo: " + completa.getLast());
-                    System.out.println("Primero: " + completa.getFirst());
-                    
-                    asignarTemporales(completa);
-                    
-                    System.out.println("Prefijo: " + sb.toString().trim());
-                    prefijoWriter.write("Linea " + tokenActual.getLinea() + ": " + sb.toString().trim());
+                    prefijoWriter.write(tokenIgual.getLexema() + ", " + tokenAsignado.getLexema() + ", " + resultado.getLexema());
                     prefijoWriter.newLine();
                 }
+                cuadruplos.clear();
 
                 pilaOperandos.clear();
                 pilaOperadores.clear();
@@ -970,11 +962,7 @@ public class Sintaxis {
             }
             else if(topePila == 814){ //INSERTAR OPERANDO A PILA PREFIJO
                 if(insertandoPrefijo){
-                    List<Token> hoja = new LinkedList<>();
-                    hoja.add(tokenActual);
-                    pilaOperandos.push(hoja);
-                    //pilaPrefijo.push(tokenActual);
-                    System.out.println("Se ha insertado el operando " + tokenActual.getLexema());
+                    pilaOperandos.push(tokenActual);
                 }
                 
                 
@@ -982,24 +970,16 @@ public class Sintaxis {
             }else if(topePila == 815){ //INSERTAR OPERADOR A PILA PREFIJO
                 if(insertandoPrefijo){
                     pilaOperadores.push(tokenActual);
-                    //pilaPrefijo.push(tokenActual);
-                    System.out.println("Se ha insertado el operador " + tokenActual.getLexema());
                 }
                 
                 
                 pilaSintactica.pop();
             }else if(topePila == 816){
-                if(insertandoPrefijo){
-                    List<Token> derecho = pilaOperandos.pop();
-                    List<Token> izquierdo = pilaOperandos.pop();
+                if(insertandoPrefijo && pilaOperandos.size() >= 2 && !pilaOperadores.isEmpty()){
+                    Token derecho = pilaOperandos.pop();
+                    Token izquierdo = pilaOperandos.pop();
                     Token operador = pilaOperadores.pop();
-
-                    List<Token> bloque = new LinkedList<>();
-                    bloque.add(operador);
-                    bloque.addAll(izquierdo);
-                    bloque.addAll(derecho);
-
-                    pilaOperandos.push(bloque);
+                    pilaOperandos.push(generarTemporal(operador, izquierdo, derecho));
                 }
                 pilaSintactica.pop();
             }else if(topePila == 817){ //CAPTURAR TOKEN DE ASIGNACIÓN
@@ -1177,9 +1157,29 @@ public class Sintaxis {
         return Integer.parseInt(matriz[fila - 1][columna - 1]);
     }
 
-    private void asignarTemporales(List<Token> completa) {
-        
+    /**
+     * Consulta la matriz de compatibilidad con (izquierdo, derecho), registra el
+     * cuádruplo "operador, izquierdo, derecho, temporal" y regresa el temporal.
+     * Si los tipos son incompatibles se reporta el error y el temporal es Variant.
+     */
+    private Token generarTemporal(Token operador, Token izquierdo, Token derecho) {
+        String tabla = Compatibilidad.tablaDeOperador(operador.getNumeroToken());
+        int tipo = Compatibilidad.VARIANT;
+
+        if(tabla != null){
+            int valor = compatibilidad.consultar(tabla,
+                    Compatibilidad.tipoDeToken(izquierdo.getNumeroToken()),
+                    Compatibilidad.tipoDeToken(derecho.getNumeroToken()));
+            if(valor > 500){
+                listaErrores.add(new Error(valor, operador.getLinea(), operador.getLexema(), TipoError.SEMANTICA));
+            }else{
+                tipo = Compatibilidad.tipoDeResultado(valor);
+            }
+        }
+
+        String nombre = Compatibilidad.prefijoTemporal(tipo) + (++contadoresTemporales[tipo]);
+        Token temporal = new Token(Compatibilidad.tokenTemporal(tipo), nombre, operador.getLinea());
+        cuadruplos.add(operador.getLexema() + ", " + izquierdo.getLexema() + ", " + derecho.getLexema() + ", " + nombre);
+        return temporal;
     }
-    
-    
 }
