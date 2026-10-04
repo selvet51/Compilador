@@ -85,7 +85,7 @@ public class Sintaxis {
             	matriz[i] = line.split(",");
             	i++;
             }
-            prefijoWriter = new BufferedWriter(new FileWriter("prefijos.txt"));
+            prefijoWriter = new BufferedWriter(new FileWriter("temporales.txt"));
 
 
         	
