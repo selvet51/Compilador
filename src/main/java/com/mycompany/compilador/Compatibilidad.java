@@ -2,12 +2,13 @@ package com.mycompany.compilador;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
-import java.util.HashMap;
 
 /**
- * Matriz de compatibilidad de tipos (resources/Matriz Compatibilidad.csv).
+ * Matriz de compatibilidad de tipos (resources/COMPATIBILIDAD.csv).
  *
- * Los tipos se indexan igual que las columnas del CSV:
+ * El archivo trae 8 tablas de 9 filas cada una, en este orden: SUMA, RESTA, MULT,
+ * DIV, REL, REL2, LOG y RESTO. Cada fila es: tabla, tipo izquierdo y el resultado
+ * para cada tipo derecho. Los tipos se indexan igual que las columnas del CSV:
  * 0 Bin, 1 Dec, 2 Oct, 3 Hex, 4 Real, 5 Exp, 6 Cadena, 7 Boolean, 8 Variant.
  *
  * Valores de la matriz: mayor a 500 = error, negativo = tipo resultante
@@ -17,77 +18,63 @@ public class Compatibilidad {
 
     public static final int VARIANT = 8;
 
+    public static final int SUMA = 0, RESTA = 1, MULT = 2, DIV = 3, REL = 4, REL2 = 5, LOG = 6, RESTO = 7;
+    private static final String[] NOMBRES_TABLAS = {"SUMA", "RESTA", "MULT", "DIV", "REL", "REL2", "LOG", "RESTO"};
+
     private static final String[] NOMBRES = {"Bin", "Dec", "Oct", "Hex", "Real", "Exp", "Cad", "Bool", "Var"};
     private static final int[] TOKEN_TEMPORAL = {-110, -111, -112, -113, -114, -115, -116, -117, -118};
 
-    private final HashMap<String, int[]> tablas = new HashMap<>();
+    static private int numTipos = 9;
+    static private int numFilas = NOMBRES_TABLAS.length * numTipos;
+    static private int numColumnas = 11;
+    static private String[][] matriz = new String[numFilas][numColumnas];
 
     public Compatibilidad() {
-        try (BufferedReader reader = new BufferedReader(new FileReader("resources/Matriz Compatibilidad.csv"))) {
+        int i = 0;
+        try (BufferedReader reader = new BufferedReader(new FileReader("resources/COMPATIBILIDAD.csv"))) {
             reader.readLine(); // encabezado
             String line;
-            while ((line = reader.readLine()) != null) {
+            while ((line = reader.readLine()) != null && i < numFilas) {
                 line = line.trim();
                 if (line.isEmpty()) {
                     continue;
                 }
-                String[] partes = line.split(",");
-                int[] fila = new int[9];
-                for (int i = 0; i < 9; i++) {
-                    fila[i] = Integer.parseInt(partes[2 + i].trim());
-                }
-                // la clave es TABLA + índice del tipo izquierdo
-                tablas.put(partes[0].trim() + indiceDeNombre(partes[1].trim()), fila);
+                matriz[i] = line.split(",");
+                i++;
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
 
-    private int indiceDeNombre(String nombre) {
-        switch (nombre) {
-            case "Bin": return 0;
-            case "Dec": return 1;
-            case "Oct": return 2;
-            case "Hex": return 3;
-            case "Real": return 4;
-            case "Exp": return 5;
-            case "Cadena": return 6;
-            case "Boolean": return 7;
-            default: return VARIANT;
+        // Si alguien cambia el orden de las tablas en el CSV, se avisa en lugar de leer mal.
+        for (int tabla = 0; tabla < NOMBRES_TABLAS.length; tabla++) {
+            String[] fila = matriz[tabla * numTipos];
+            if (fila == null || !NOMBRES_TABLAS[tabla].equals(fila[0].trim())) {
+                System.out.println("COMPATIBILIDAD.csv: se esperaba la tabla " + NOMBRES_TABLAS[tabla]
+                        + " en la fila " + (tabla * numTipos + 2) + " del archivo.");
+            }
         }
     }
 
     /** Valor crudo de la matriz para (tabla, izquierdo, derecho). */
-    public int consultar(String tabla, int izquierdo, int derecho) {
-        int[] fila = tablas.get(tabla + izquierdo);
-        return fila == null ? 0 : fila[derecho];
+    public int consultar(int tabla, int izquierdo, int derecho) {
+        return Integer.parseInt(matriz[tabla * numTipos + izquierdo][2 + derecho].trim());
     }
 
-    /** Nombre de la tabla que le toca a un operador, o null si no hay tabla para él. */
-    public static String tablaDeOperador(int tokenOperador) {
+    /** Tabla que le toca a un operador, o -1 si no hay tabla para él. */
+    public static int tablaDeOperador(int tokenOperador) {
         switch (tokenOperador) {
-            case -11: return "SUMA";                                   // +
-            case -12: return "RESTA";                                  // -
-            case -13: case -6: case -72: return "MULT";                // *, ^, #
-            case -14: case -15: return "DIV";                          // /, %
-            case -17: case -18: case -19: return "MULT";               // <<, >>, >>>
-            case -20: case -21: case -22: case -23: case -24: case -25:
-                return "REL";                                          // <, >, <=, >=, ==, !=
-            case -30: case -31: case -4: case -5: return "LOG";        // &&, ||, |, &
-            default: return null;
-        }
-    }
-
-    /** Número de error que corresponde a una tabla (547 a 552). */
-    public static int errorDeTabla(String tabla) {
-        switch (tabla) {
-            case "SUMA": return 547;
-            case "RESTA": return 548;
-            case "MULT": return 549;
-            case "DIV": return 550;
-            case "REL": return 551;
-            default: return 552;
+            case -11: return SUMA;                                     // +
+            case -12: return RESTA;                                    // -
+            case -13: return MULT;                                     // *
+            case -14: return DIV;                                      // /
+            case -20: case -21: case -22: case -23:
+                return REL;                                            // <, >, <=, >=
+            case -24: case -25: return REL2;                           // ==, !=
+            case -30: case -31: case -4: case -5: return LOG;          // &&, ||, |, &
+            case -15: case -6: case -72:
+            case -17: case -18: case -19: return RESTO;                // %, ^, #, <<, >>, >>>
+            default: return -1;
         }
     }
 

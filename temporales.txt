@@ -1,4 +1,0 @@
-Linea 6:
-=, #DI, 0
-Linea 6:
-=, #DI, 5

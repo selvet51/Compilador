@@ -63,6 +63,8 @@ public class Error {
                         case 550: descripcion = "Tipos incompatibles en la división."; break;
                         case 551: descripcion = "Tipos incompatibles en la comparación relacional."; break;
                         case 552: descripcion = "Tipos incompatibles en la operación lógica."; break;
+                        case 553: descripcion = "Tipos incompatibles en la comparación de igualdad."; break;
+                        case 554: descripcion = "Tipos incompatibles en la operación de resto."; break;
 			default:  descripcion = "Error no identificado."; break;
 		}
 		this.linea = linea;

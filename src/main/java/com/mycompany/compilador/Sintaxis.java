@@ -1203,10 +1203,10 @@ public class Sintaxis {
      * Si los tipos son incompatibles se reporta el error y el temporal es Variant.
      */
     private Token generarTemporal(Token operador, Token izquierdo, Token derecho) {
-        String tabla = Compatibilidad.tablaDeOperador(operador.getNumeroToken());
+        int tabla = Compatibilidad.tablaDeOperador(operador.getNumeroToken());
         int tipo = Compatibilidad.VARIANT;
 
-        if(tabla != null){
+        if(tabla >= 0){
             int valor = compatibilidad.consultar(tabla,
                     Compatibilidad.tipoDeToken(izquierdo.getNumeroToken()),
                     Compatibilidad.tipoDeToken(derecho.getNumeroToken()));
