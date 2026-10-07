@@ -31,6 +31,7 @@ public class Sintaxis {
     private int numeroDimensiones = 0, numeroDeParametros = 0;
     private String tamañoArreglo;
     private String ultimaVar, ultimaConst, ultimaFunc, ultimoPar;
+    private String registroDeVar;
     private HashMap<Integer, List<Integer>> producciones;
     private HashMap<Integer, String> valorNoTerminales;
     private HashMap<Integer, String> valorTokens;
@@ -298,6 +299,10 @@ public class Sintaxis {
         valorNoTerminales.put(816, "@"); //INSERTAR OPERADOR
         
         valorNoTerminales.put(817, "@"); //INSERTAR OPERADOR
+
+        valorNoTerminales.put(818, "@"); //INSERTAR ID DE REGISTRO
+
+        valorNoTerminales.put(819, "@"); //VERIFICAR TIPO REGISTRO DE UNA VARIABLE
         
         
         //AÑADIR A LA PILA
@@ -305,12 +310,12 @@ public class Sintaxis {
         
         producciones.put(1, Arrays.asList(17, -77, -49, -50, -45, 800, 13, 18, 801, -46));
         producciones.put(2, Arrays.asList());
-        producciones.put(3, Arrays.asList(-73, -60, -45, -60, 19, -46, 17));
+        producciones.put(3, Arrays.asList(-73, 818, -60, 802, -45, 809, -60, 19, 810, -46, 803, 17));
         producciones.put(4, Arrays.asList());
         producciones.put(5, Arrays.asList(-7, 809, -60, 19));
         producciones.put(6, Arrays.asList(-74, 20, 804, -60, 22, 23, 813, -9, 17));
         producciones.put(7, Arrays.asList());
-        producciones.put(8, Arrays.asList(-73, -60));
+        producciones.put(8, Arrays.asList(-73, 819, -60));
         producciones.put(9, Arrays.asList());
         producciones.put(10, Arrays.asList(-7, 806, -55, 21));
         producciones.put(11, Arrays.asList());
@@ -402,7 +407,7 @@ public class Sintaxis {
         producciones.put(97, Arrays.asList(-99, -49, 5, -50, 13));
         producciones.put(98, Arrays.asList(-100, 13, -99, -49, 5, -50));
         producciones.put(99, Arrays.asList(-101, 5));
-        producciones.put(100, Arrays.asList(-102, -49, 5, 30, 37, -50, 13));
+        producciones.put(100, Arrays.asList(-102, -49, 802, 5, 30, 37, -50, 13, 803));
         producciones.put(101, Arrays.asList(-10, 5));
         producciones.put(102, Arrays.asList(813, -9, 13, 813, -9, 5, 30));
         producciones.put(103, Arrays.asList(-103, -49, 5, -50, -45, -108, 5, -10, 13, 38, -46));
@@ -707,11 +712,16 @@ public class Sintaxis {
                     case -67: tipo = "Booleano"; break;
                     default: break;
                 }
+                if(registroDeVar != null){
+                    tipo = "Registro";
+                }
+                boolean insertada = false;
                 ambitos = conexionDB.buscarPorId(tokenActual.getLexema());
                 if(ambitos.isEmpty()){
                     if(conexionDB.insertarVariable(tokenActual.getLexema(), tipo, "Variable", pilaAmbitos.peek(), tokenActual.getLinea())){
                         //System.out.println("Se ha insertado correctamente la variable.");
                         ultimaVar = tokenActual.getLexema();
+                        insertada = true;
                     }else{
                         //System.out.println("No se ha insertado nada.");
                     }
@@ -726,12 +736,13 @@ public class Sintaxis {
                     }
                     if(encontrado){
                         erroresAmbitosCont++;
-                        erroresAmbitos.put(contadorAmbitos, erroresAmbitos.get(contadorAmbitos) + 1);
+                        erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
                         listaErrores.add(new Error(542, tokenActual.getLinea(), tokenActual.getLexema(), TipoError.AMBITO));
                     }else{
                         if(conexionDB.insertarVariable(tokenActual.getLexema(), tipo, "Variable", pilaAmbitos.peek(), tokenActual.getLinea())){
                             //System.out.println("Se ha insertado correctamente la variable.");
                             ultimaVar = tokenActual.getLexema();
+                            insertada = true;
                         }else{
                             //System.out.println("No se ha insertado nada.");
                         }
@@ -741,6 +752,13 @@ public class Sintaxis {
                 
                 
                 
+                if(registroDeVar != null){
+                    if(insertada){
+                        conexionDB.asignarRegistro(tokenActual.getLexema(), pilaAmbitos.peek(), registroDeVar);
+                    }
+                    registroDeVar = null;
+                }
+
                 //System.out.println("PEEK PILA SINTACTICA: " + pilaSintactica.peek());
                 //System.out.println(tokenActual.getLexema());
             }
@@ -799,7 +817,7 @@ public class Sintaxis {
                     }
                     if(encontrado){
                         erroresAmbitosCont++;
-                        erroresAmbitos.put(contadorAmbitos, erroresAmbitos.get(contadorAmbitos) + 1);
+                        erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
                         listaErrores.add(new Error(542, tokenActual.getLinea(), tokenActual.getLexema(), TipoError.AMBITO));
                     }else{
                         if(conexionDB.insertarVariable(tokenActual.getLexema(), tipo, "Constante", pilaAmbitos.peek(), tokenActual.getLinea())){
@@ -895,42 +913,13 @@ public class Sintaxis {
                 
             }else if (topePila == 811){ //VERFICAR QUE EXISTE ID
                 //System.out.println("TOKEN ACTUAL = " + tokenActual.getLexema());
-                boolean coincide = false;
-                ambitos = conexionDB.verificarSimbolo(tokenActual.getLexema());
-                //System.out.println("LISTA DE AMBITOS ARROJADA POR BASE DE DATOS = " + ambitos);
-                //System.out.println("PILA DE AMBITOS = " + pilaAmbitos);
-                
-                if(!ambitos.isEmpty()){
-                    for(Integer ambito: ambitos){
-                        for (int i = 0; i < pilaAmbitos.size(); i++) {
-                            if(ambito == pilaAmbitos.get(i)){
-                                coincide = true;
-                                
-                                break;
-                            }
-                        }  
-                    }
-                    if(coincide){
-                        //System.out.println("SE HA ENCONTRADO EL SÍMBOLO DECLARADO.");
-                    }else{
-                        erroresAmbitosCont++;
-                        erroresAmbitos.put(contadorAmbitos, erroresAmbitos.get(contadorAmbitos) + 1);
-                        listaErrores.add(new Error(541, tokenActual.getLinea(), tokenActual.getLexema(), TipoError.AMBITO));
-                    }
-                    
-                }else{
-                    erroresAmbitosCont++;
-                    erroresAmbitos.put(contadorAmbitos, erroresAmbitos.get(contadorAmbitos) + 1);
-                    //System.out.println("EL SÍMBOLO NO ESTÁ DECLARADO.");
-                    listaErrores.add(new Error(540, tokenActual.getLinea(), tokenActual.getLexema(), TipoError.AMBITO));
-                }
+                verificarSimbolo(tokenActual);
                 if(insertandoPrefijo){
                     pilaOperandos.push(tokenActual);
                 }else{
                     tokenAsignado = tokenActual;
                 }
                 
-                coincide = false;
                 pilaSintactica.pop();
                 
             }else if(topePila == 812){ //ACTIVAR ZONA DE INFIJO A PREFIJO
@@ -985,6 +974,15 @@ public class Sintaxis {
             }else if(topePila == 817){ //CAPTURAR TOKEN DE ASIGNACIÓN
                 tokenIgual = tokenActual;
                 pilaSintactica.pop();
+            }else if(topePila == 818){ //INSERTAR ID DE REGISTRO
+                pilaSintactica.pop();
+                if(insertarSimbolo(tokenActual, "Registro", "Registro")){
+                    ultimaFunc = tokenActual.getLexema();
+                }
+            }else if(topePila == 819){ //VERIFICAR QUE EL REGISTRO DE UNA VARIABLE EXISTE
+                pilaSintactica.pop();
+                verificarSimbolo(tokenActual);
+                registroDeVar = tokenActual.getLexema();
             }
             else if(topePila > 0){ //ES NO TERMINAL
                 
@@ -1071,7 +1069,13 @@ public class Sintaxis {
         
         int[][] arregloTabla = conexionDB.tablaAmbitos(contadorAmbitos + 1);
         
-        totales = conexionDB.tablaTotales();
+        totales = new LinkedList<>();
+        for(int i = 0; i < contadorAmbitos + 1; i++){
+            totales.add(0);
+        }
+        for(Simbolo simbolo: simbolos){
+            totales.set(simbolo.getAmbito(), totales.get(simbolo.getAmbito()) + 1);
+        }
         
          List<Integer> filaTotal = conexionDB.ObtenerTotalesSImbolos();
         
@@ -1084,7 +1088,7 @@ public class Sintaxis {
             rowAmbito.createCell(9).setCellValue(erroresAmbitos.get(i));
             rowAmbito.createCell(10).setCellValue(erroresAmbitos.get(i) + totales.get(i));
         }
-        Row rowFinal = sheetAmbito.createRow(contadorAmbitos + 1);
+        Row rowFinal = sheetAmbito.createRow(contadorAmbitos + 2);
         
         rowFinal.createCell(0).setCellValue("Totales");
         rowFinal.createCell(1).setCellValue(filaTotal.get(0));
@@ -1155,6 +1159,42 @@ public class Sintaxis {
     
     public int verificarMatriz(int fila, int columna){
         return Integer.parseInt(matriz[fila - 1][columna - 1]);
+    }
+
+    /** Revisa que el id esté declarado en un ámbito visible; si no, agrega el error 540 o 541. */
+    private void verificarSimbolo(Token token) {
+        ambitos = conexionDB.verificarSimbolo(token.getLexema());
+
+        if(!ambitos.isEmpty()){
+            boolean coincide = false;
+            for(Integer ambito: ambitos){
+                if(pilaAmbitos.contains(ambito)){
+                    coincide = true;
+                    break;
+                }
+            }
+            if(!coincide){
+                erroresAmbitosCont++;
+                erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
+                listaErrores.add(new Error(541, token.getLinea(), token.getLexema(), TipoError.AMBITO));
+            }
+        }else{
+            erroresAmbitosCont++;
+            erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
+            listaErrores.add(new Error(540, token.getLinea(), token.getLexema(), TipoError.AMBITO));
+        }
+    }
+
+    /** Inserta el id en el ámbito actual; si ya existe en él agrega el error 542. */
+    private boolean insertarSimbolo(Token token, String tipo, String clase) {
+        ambitos = conexionDB.buscarPorId(token.getLexema());
+        if(ambitos.contains(pilaAmbitos.peek())){
+            erroresAmbitosCont++;
+            erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
+            listaErrores.add(new Error(542, token.getLinea(), token.getLexema(), TipoError.AMBITO));
+            return false;
+        }
+        return conexionDB.insertarVariable(token.getLexema(), tipo, clase, pilaAmbitos.peek(), token.getLinea());
     }
 
     /**

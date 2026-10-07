@@ -221,3 +221,17 @@ END //
 
 DELIMITER ;
 
+
+
+DELIMITER //
+
+CREATE PROCEDURE asignarRegistro(
+    IN p_id VARCHAR(50),
+    IN p_ambito INT,
+    IN p_registro VARCHAR(50)
+)
+BEGIN
+    UPDATE simbolos SET pertenece_funcion = p_registro WHERE id = p_id AND ambito = p_ambito;
+END //
+
+DELIMITER ;
