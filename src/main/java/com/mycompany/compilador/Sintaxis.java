@@ -32,6 +32,7 @@ public class Sintaxis {
     private String tamañoArreglo;
     private String ultimaVar, ultimaConst, ultimaFunc, ultimoPar;
     private String registroDeVar;
+    private int enIndice = 0;
     private HashMap<Integer, List<Integer>> producciones;
     private HashMap<Integer, String> valorNoTerminales;
     private HashMap<Integer, String> valorTokens;
@@ -303,6 +304,10 @@ public class Sintaxis {
         valorNoTerminales.put(818, "@"); //INSERTAR ID DE REGISTRO
 
         valorNoTerminales.put(819, "@"); //VERIFICAR TIPO REGISTRO DE UNA VARIABLE
+
+        valorNoTerminales.put(820, "@"); //ABRIR ÍNDICE DE ARREGLO
+
+        valorNoTerminales.put(821, "@"); //CERRAR ÍNDICE DE ARREGLO
         
         
         //AÑADIR A LA PILA
@@ -416,7 +421,7 @@ public class Sintaxis {
         producciones.put(106, Arrays.asList());
         producciones.put(107, Arrays.asList(-107, -10, 13, 18));
         producciones.put(108, Arrays.asList(-108, 5, -10, 13, 38));
-        producciones.put(109, Arrays.asList(-47, 5, 30, -48));
+        producciones.put(109, Arrays.asList(820, -47, 5, 30, -48, 821));
         producciones.put(110, Arrays.asList(-78));
         producciones.put(111, Arrays.asList(-79, -49, 5, -50));
         producciones.put(112, Arrays.asList(-80, -49, 5, -7, 5, -50));
@@ -917,7 +922,9 @@ public class Sintaxis {
                 if(insertandoPrefijo){
                     pilaOperandos.push(tokenActual);
                 }else{
-                    tokenAsignado = tokenActual;
+                    if(enIndice == 0){
+                        tokenAsignado = tokenActual;
+                    }
                 }
                 
                 pilaSintactica.pop();
@@ -933,6 +940,7 @@ public class Sintaxis {
 
                 if(!pilaOperandos.isEmpty()){
                     Token resultado = pilaOperandos.pop();
+                    verificarAsignacion(resultado);
 
                     prefijoWriter.write("Linea " + tokenAsignado.getLinea() + ":");
                     prefijoWriter.newLine();
@@ -973,6 +981,12 @@ public class Sintaxis {
                 pilaSintactica.pop();
             }else if(topePila == 817){ //CAPTURAR TOKEN DE ASIGNACIÓN
                 tokenIgual = tokenActual;
+                pilaSintactica.pop();
+            }else if(topePila == 820){ //ABRIR ÍNDICE DE ARREGLO
+                enIndice++;
+                pilaSintactica.pop();
+            }else if(topePila == 821){ //CERRAR ÍNDICE DE ARREGLO
+                enIndice--;
                 pilaSintactica.pop();
             }else if(topePila == 818){ //INSERTAR ID DE REGISTRO
                 pilaSintactica.pop();
@@ -1195,6 +1209,37 @@ public class Sintaxis {
             return false;
         }
         return conexionDB.insertarVariable(token.getLexema(), tipo, clase, pilaAmbitos.peek(), token.getLinea());
+    }
+
+    /**
+     * Revisa que el resultado de la expresión quepa en la variable asignada (error 555).
+     * En asignaciones compuestas se evalúa como x = x op expresión.
+     */
+    private void verificarAsignacion(Token resultado) {
+        int tipoVariable = Compatibilidad.tipoDeToken(tokenAsignado.getNumeroToken());
+        int tipoValor = Compatibilidad.tipoDeToken(resultado.getNumeroToken());
+
+        int tabla = -1;
+        switch(tokenIgual.getNumeroToken()){
+            case -34: tabla = Compatibilidad.SUMA; break;
+            case -35: tabla = Compatibilidad.RESTA; break;
+            case -36: tabla = Compatibilidad.MULT; break;
+            case -37: tabla = Compatibilidad.DIV; break;
+            default: break;
+        }
+        if(tabla >= 0){
+            int valor = compatibilidad.consultar(tabla, tipoVariable, tipoValor);
+            if(valor > 500){
+                listaErrores.add(new Error(valor, tokenAsignado.getLinea(), tokenIgual.getLexema(), TipoError.SEMANTICA));
+                tipoValor = Compatibilidad.VARIANT;
+            }else{
+                tipoValor = Compatibilidad.tipoDeResultado(valor);
+            }
+        }
+
+        if(!Compatibilidad.cabe(tipoVariable, tipoValor)){
+            listaErrores.add(new Error(555, tokenAsignado.getLinea(), tokenAsignado.getLexema(), TipoError.SEMANTICA));
+        }
     }
 
     /**

@@ -93,6 +93,24 @@ public class Compatibilidad {
         }
     }
 
+    /**
+     * Si un valor de tipo tipoValor cabe en una variable de tipo tipoVariable.
+     * Solo se permite el mismo tipo o ensanchar (Dec a Real o Exp, Real a Exp);
+     * Variant nunca da error para no repetir errores en cascada.
+     */
+    public static boolean cabe(int tipoVariable, int tipoValor) {
+        if (tipoVariable == VARIANT || tipoValor == VARIANT || tipoVariable == tipoValor) {
+            return true;
+        }
+        if (tipoValor == 1) {                       // Dec
+            return tipoVariable == 4 || tipoVariable == 5;
+        }
+        if (tipoValor == 4) {                       // Real
+            return tipoVariable == 5;
+        }
+        return false;
+    }
+
     /** Convierte el valor de la matriz (negativo o 0) a índice de tipo. */
     public static int tipoDeResultado(int valor) {
         return valor < 0 ? -valor - 1 : VARIANT;
