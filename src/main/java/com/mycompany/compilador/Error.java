@@ -57,6 +57,15 @@ public class Error {
                         case 540: descripcion = "No se ha encontrado el símbolo declarado."; break;
                         case 541: descripcion = "El símbolo no se encuentra dentro del ámbito correspondiente."; break;
                         case 542: descripcion = "El símbolo ya estaba declarado anteriormente."; break;
+                        case 547: descripcion = "Tipos incompatibles en la suma."; break;
+                        case 548: descripcion = "Tipos incompatibles en la resta."; break;
+                        case 549: descripcion = "Tipos incompatibles en la multiplicación."; break;
+                        case 550: descripcion = "Tipos incompatibles en la división."; break;
+                        case 551: descripcion = "Tipos incompatibles en la comparación relacional."; break;
+                        case 552: descripcion = "Tipos incompatibles en la operación lógica."; break;
+                        case 553: descripcion = "Tipos incompatibles en la comparación de igualdad."; break;
+                        case 554: descripcion = "Tipos incompatibles en la operación de resto."; break;
+                        case 555: descripcion = "El resultado de la expresión no cabe en la variable."; break;
 			default:  descripcion = "Error no identificado."; break;
 		}
 		this.linea = linea;
@@ -93,6 +102,7 @@ public class Error {
 			case LÉXICO: return "Léxico";
 			case SINTÁXIS: return "Sintáxis";
                         case AMBITO: return "Ámbitos";
+                        case SEMANTICA: return "Semántica";
 			default: return null;
 		}
 	}

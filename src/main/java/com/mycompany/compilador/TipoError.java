@@ -7,5 +7,6 @@ package com.mycompany.compilador;
 public enum TipoError {
 	LÉXICO,
 	SINTÁXIS,
-        AMBITO
+        AMBITO,
+        SEMANTICA
 }
