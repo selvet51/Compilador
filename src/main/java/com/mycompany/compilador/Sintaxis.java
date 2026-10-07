@@ -934,12 +934,15 @@ public class Sintaxis {
                 
             }else if (topePila == 811){ //VERFICAR QUE EXISTE ID
                 //System.out.println("TOKEN ACTUAL = " + tokenActual.getLexema());
-                verificarSimbolo(tokenActual);
+                boolean declarado = verificarSimbolo(tokenActual);
+                // Un id no declarado (o fuera de ámbito) se trata como Variant para no encadenar errores de tipo.
+                Token operando = declarado ? tokenActual
+                        : new Token(Compatibilidad.tokenTemporal(Compatibilidad.VARIANT), tokenActual.getLexema(), tokenActual.getLinea());
                 if(insertandoPrefijo){
-                    pilaOperandos.push(tokenActual);
+                    pilaOperandos.push(operando);
                 }else{
                     if(enIndice == 0){
-                        tokenAsignado = tokenActual;
+                        tokenAsignado = operando;
                     }
                 }
                 
@@ -1193,8 +1196,8 @@ public class Sintaxis {
         return Integer.parseInt(matriz[fila - 1][columna - 1]);
     }
 
-    /** Revisa que el id esté declarado en un ámbito visible; si no, agrega el error 540 o 541. */
-    private void verificarSimbolo(Token token) {
+    /** Revisa que el id esté declarado en un ámbito visible; si no, agrega el error 540 o 541 y regresa false. */
+    private boolean verificarSimbolo(Token token) {
         ambitos = conexionDB.verificarSimbolo(token.getLexema());
 
         if(!ambitos.isEmpty()){
@@ -1209,12 +1212,15 @@ public class Sintaxis {
                 erroresAmbitosCont++;
                 erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
                 listaErrores.add(new Error(541, token.getLinea(), token.getLexema(), TipoError.AMBITO));
+                return false;
             }
         }else{
             erroresAmbitosCont++;
             erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
             listaErrores.add(new Error(540, token.getLinea(), token.getLexema(), TipoError.AMBITO));
+            return false;
         }
+        return true;
     }
 
     /** Inserta el id en el ámbito actual; si ya existe en él agrega el error 542. */
@@ -1286,6 +1292,8 @@ public class Sintaxis {
         int tipoValor = Compatibilidad.tipoDeToken(resultado.getNumeroToken());
         asignacionesPorLinea.computeIfAbsent(tokenAsignado.getLinea(), k -> new LinkedList<>())
                 .add(tokenAsignado.getLexema() + " -> " + Compatibilidad.nombreTipo(tipoValor));
+        // La asignación cuenta como un temporal Variant en la hoja "Semántica 1".
+        temporalesPorLinea.computeIfAbsent(tokenAsignado.getLinea(), k -> new int[9])[Compatibilidad.VARIANT]++;
 
         int tabla = -1;
         switch(tokenIgual.getNumeroToken()){
