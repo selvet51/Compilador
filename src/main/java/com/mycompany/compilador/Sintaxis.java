@@ -1140,7 +1140,18 @@ public class Sintaxis {
         
         prefijoWriter.close();
         
-        JOptionPane.showMessageDialog(null, "Hay un total de " + listaErrores.size() + " error(es) en sintáxis o ámbitos.");
+        int erroresSintaxis = 0, erroresAmbito = 0, erroresSemantica = 0;
+        for(Error error: listaErrores){
+            switch(error.getTipoError()){
+                case "Sintáxis": erroresSintaxis++; break;
+                case "Ámbitos": erroresAmbito++; break;
+                case "Semántica": erroresSemantica++; break;
+                default: break;
+            }
+        }
+        JOptionPane.showMessageDialog(null, "Hay un total de " + erroresSintaxis + " error(es) de sintáxis.\n"
+                + "Hay un total de " + erroresAmbito + " error(es) de ámbito.\n"
+                + "Hay un total de " + erroresSemantica + " error(es) de semántica.");
         
         System.out.println("Pila de prefijo: " + pilaPrefijo);
         
