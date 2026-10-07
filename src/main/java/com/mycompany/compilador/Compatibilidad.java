@@ -116,6 +116,12 @@ public class Compatibilidad {
         return valor < 0 ? -valor - 1 : VARIANT;
     }
 
+    /** Nombre del tipo como aparece en la hoja "Semántica 1": TBin, TDec, ... TVariant. */
+    public static String nombreTipo(int tipo) {
+        String[] columnas = {"TBin", "TDec", "TOct", "THex", "TReal", "Texp", "TCadena", "TBoolean", "TVariant"};
+        return columnas[tipo];
+    }
+
     public static int tokenTemporal(int tipo) {
         return TOKEN_TEMPORAL[tipo];
     }

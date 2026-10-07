@@ -1,0 +1,19 @@
+Linea 10:
+*, 3, 4.5, TempReal1
+=, #DX, TempReal1
+Linea 11:
+=, $A, 3
+Linea 12:
++, #DX, 1, TempDec1
+=, #DX, TempDec1
+Linea 13:
++=, #DX, 2.5
+Linea 14:
++=, #DX, 2
+Linea 15:
+/, 8, 2, TempReal2
+=, #DX, TempReal2
+Linea 16:
+=, $R, 2.5
+Linea 17:
+=, @C, 3

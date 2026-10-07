@@ -14,6 +14,9 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.Stack;
 import javax.swing.JOptionPane;
 import org.apache.poi.ss.usermodel.Row;
@@ -68,6 +71,9 @@ public class Sintaxis {
     private Sheet sheetErrores;
     private Sheet sheetAmbito;
     private Sheet sheetSimbolos;
+    private Sheet sheetSemantica;
+    private Map<Integer, int[]> temporalesPorLinea = new TreeMap<>();
+    private Map<Integer, List<String>> asignacionesPorLinea = new TreeMap<>();
     
     
     private int contPROGRAMA = 0, contLISTADEPARAMETROS = 0, contEXP_PAS = 0, contDECLARACIONCONSTANTES = 0, contOR = 0, contAND = 0, contFACTOR = 0, contCONSTSINSIGNO = 0, contCONSTNUMERICA = 0,
@@ -632,6 +638,16 @@ public class Sintaxis {
         row5.createCell(7).setCellValue("TParr");
         
         
+        //SHEET DE SEMÁNTICA 1
+        sheetSemantica = wb.createSheet("Semántica 1");
+        
+        String[] encabezadoSemantica = {"Linea", "TBin", "TDec", "TOct", "THex", "TReal", "Texp", "TCadena", "TBoolean", "TVariant", "Asignaciones", "Errores"};
+        Row rowSemantica = sheetSemantica.createRow(0);
+        for(int c = 0; c < encabezadoSemantica.length; c++){
+            rowSemantica.createCell(c).setCellValue(encabezadoSemantica[c]);
+        }
+        sheetSemantica.setColumnWidth(10, 40 * 256);
+        
     }
     
     public LinkedList<Error> analizarSintaxis(LinkedList<Token> listaTokens) throws IOException{
@@ -1143,6 +1159,8 @@ public class Sintaxis {
 
 
         
+        llenarSemantica();
+
         Row row2 = sheetSintaxis.createRow(1);
         row2.createCell(0).setCellValue(listaErrores.size());
 	row2.createCell(1).setCellValue(contPROGRAMA);
@@ -1212,12 +1230,62 @@ public class Sintaxis {
     }
 
     /**
+     * Llena la hoja "Semántica 1": una fila por línea con sus temporales, asignaciones y
+     * errores semánticos (547 a 555), y la fila de totales pegada a la última línea.
+     */
+    private void llenarSemantica() {
+        Map<Integer, Integer> erroresPorLinea = new TreeMap<>();
+        for(Error error: listaErrores){
+            if(error.getNumeroError() >= 547 && error.getNumeroError() <= 555){
+                erroresPorLinea.merge(error.getLinea(), 1, Integer::sum);
+            }
+        }
+
+        TreeSet<Integer> lineas = new TreeSet<>(temporalesPorLinea.keySet());
+        lineas.addAll(asignacionesPorLinea.keySet());
+        lineas.addAll(erroresPorLinea.keySet());
+
+        int[] totalTemporales = new int[9];
+        int totalAsignaciones = 0, totalErrores = 0;
+        int fila = 0;
+
+        for(int linea: lineas){
+            Row row = sheetSemantica.createRow(++fila);
+            row.createCell(0).setCellValue(linea);
+
+            int[] temporales = temporalesPorLinea.getOrDefault(linea, new int[9]);
+            for(int i = 0; i < 9; i++){
+                row.createCell(i + 1).setCellValue(temporales[i]);
+                totalTemporales[i] += temporales[i];
+            }
+
+            List<String> asignaciones = asignacionesPorLinea.getOrDefault(linea, new LinkedList<>());
+            row.createCell(10).setCellValue(String.join("; ", asignaciones));
+            totalAsignaciones += asignaciones.size();
+
+            int errores = erroresPorLinea.getOrDefault(linea, 0);
+            row.createCell(11).setCellValue(errores);
+            totalErrores += errores;
+        }
+
+        Row rowTotales = sheetSemantica.createRow(++fila);
+        rowTotales.createCell(0).setCellValue("Totales");
+        for(int i = 0; i < 9; i++){
+            rowTotales.createCell(i + 1).setCellValue(totalTemporales[i]);
+        }
+        rowTotales.createCell(10).setCellValue(totalAsignaciones);
+        rowTotales.createCell(11).setCellValue(totalErrores);
+    }
+
+    /**
      * Revisa que el resultado de la expresión quepa en la variable asignada (error 555).
      * En asignaciones compuestas se evalúa como x = x op expresión.
      */
     private void verificarAsignacion(Token resultado) {
         int tipoVariable = Compatibilidad.tipoDeToken(tokenAsignado.getNumeroToken());
         int tipoValor = Compatibilidad.tipoDeToken(resultado.getNumeroToken());
+        asignacionesPorLinea.computeIfAbsent(tokenAsignado.getLinea(), k -> new LinkedList<>())
+                .add(tokenAsignado.getLexema() + " -> " + Compatibilidad.nombreTipo(tipoValor));
 
         int tabla = -1;
         switch(tokenIgual.getNumeroToken()){
@@ -1264,6 +1332,7 @@ public class Sintaxis {
 
         String nombre = Compatibilidad.prefijoTemporal(tipo) + (++contadoresTemporales[tipo]);
         Token temporal = new Token(Compatibilidad.tokenTemporal(tipo), nombre, operador.getLinea());
+        temporalesPorLinea.computeIfAbsent(operador.getLinea(), k -> new int[9])[tipo]++;
         cuadruplos.add(operador.getLexema() + ", " + izquierdo.getLexema() + ", " + derecho.getLexema() + ", " + nombre);
         return temporal;
     }
