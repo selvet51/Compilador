@@ -157,6 +157,24 @@ public class ConexionDB {
         }
     }
     
+    public boolean asignarRegistro(String id, int ambito, String registro){
+        String sql = "{CALL asignarRegistro(?, ?, ?)}";
+
+    try (Connection conn = DriverManager.getConnection(url, usuario, contrasena);
+         CallableStatement cstmt = conn.prepareCall(sql)) {
+
+        cstmt.setString(1, id);
+        cstmt.setInt(2, ambito);
+        cstmt.setString(3, registro);
+        cstmt.execute();
+        return true;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+    
     public List<Integer> verificarSimbolo(String id) {
         List<Integer> lista = new ArrayList<>();
         String sql = "{CALL verificarSimbolo(?)}";
@@ -204,6 +222,9 @@ public class ConexionDB {
     
     public int[][] tablaAmbitos(int noAmbitos){
         int[][] arreglo = new int[noAmbitos][9];
+        for(int k = 0; k < noAmbitos; k++){
+            arreglo[k][0] = k;
+        }
     String sql = "{CALL tablaAmbitos()}";
     int i = 0;
 
@@ -212,6 +233,7 @@ public class ConexionDB {
          ResultSet rs = cstmt.executeQuery()) {
 
         while (rs.next()) {
+            i = rs.getInt(1);
             arreglo[i][0] = Integer.valueOf(rs.getInt(1));
             arreglo[i][1] = Integer.valueOf(rs.getInt(2));
             arreglo[i][2] = Integer.valueOf(rs.getInt(3));
@@ -221,7 +243,6 @@ public class ConexionDB {
             arreglo[i][6] = Integer.valueOf(rs.getInt(7));
             arreglo[i][7] = Integer.valueOf(rs.getInt(8));
             arreglo[i][8] = Integer.valueOf(rs.getInt(9));
-            i++;
         }
         
 
