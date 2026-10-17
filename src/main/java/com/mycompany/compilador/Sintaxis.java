@@ -1545,17 +1545,36 @@ public class Sintaxis {
         }
     }
 
-    /** Escribe reglas.txt: una fila por verificación, separada por tabuladores y ordenada por línea. */
+    /** Escribe reglas.txt: una línea por verificación, con las columnas alineadas y ordenada por línea. */
     private void escribirReglas() {
         List<ResultadoRegla> ordenados = new ArrayList<>(resultadosReglas);
         ordenados.sort(Comparator.comparingInt(ResultadoRegla::getLinea)); // el orden es estable
+
+        List<String[]> filas = new ArrayList<>();
+        filas.add(new String[]{"Línea", "Regla", "Clave", "Descripción", "Resultado", "Lexema", "Ámbito"});
+        for(ResultadoRegla resultado: ordenados){
+            filas.add(new String[]{String.valueOf(resultado.getLinea()), String.valueOf(resultado.getRegla()),
+                String.valueOf(resultado.getClave()), resultado.getDescripcion(), resultado.getResultado(),
+                resultado.getLexema().replaceAll("[\\t\\r\\n]", " "), String.valueOf(resultado.getAmbito())});
+        }
+
+        int[] anchos = new int[7];
+        for(String[] fila: filas){
+            for(int i = 0; i < 7; i++){
+                anchos[i] = Math.max(anchos[i], fila[i].length());
+            }
+        }
+
         try(BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("reglas.txt"), StandardCharsets.UTF_8))){
-            writer.write("Linea\tRegla\tClave\tDescripcion\tResultado\tLexema\tAmbito");
-            writer.newLine();
-            for(ResultadoRegla resultado: ordenados){
-                writer.write(resultado.getLinea() + "\t" + resultado.getRegla() + "\t" + resultado.getClave() + "\t"
-                        + resultado.getDescripcion() + "\t" + resultado.getResultado() + "\t"
-                        + resultado.getLexema().replaceAll("[\\t\\r\\n]", " ") + "\t" + resultado.getAmbito());
+            for(String[] fila: filas){
+                StringBuilder linea = new StringBuilder();
+                for(int i = 0; i < 7; i++){
+                    if(i > 0){
+                        linea.append(" | ");
+                    }
+                    linea.append(i == 6 ? fila[i] : String.format("%-" + anchos[i] + "s", fila[i]));
+                }
+                writer.write(linea.toString());
                 writer.newLine();
             }
         }catch(IOException e){
