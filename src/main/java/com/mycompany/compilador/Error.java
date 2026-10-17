@@ -66,6 +66,10 @@ public class Error {
                         case 553: descripcion = "Tipos incompatibles en la comparación de igualdad."; break;
                         case 554: descripcion = "Tipos incompatibles en la operación de resto."; break;
                         case 555: descripcion = "El resultado de la expresión no cabe en la variable."; break;
+                        case 556: descripcion = "La expresión de la condición debe ser lógica."; break;
+                        case 557: descripcion = "La cantidad de dimensiones usadas no es igual a la declarada."; break;
+                        case 558: descripcion = "La expresión del índice del arreglo debe ser entera."; break;
+                        case 559: descripcion = "El índice está fuera del rango declarado del arreglo."; break;
 			default:  descripcion = "Error no identificado."; break;
 		}
 		this.linea = linea;

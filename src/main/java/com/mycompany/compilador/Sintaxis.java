@@ -10,7 +10,11 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -45,7 +49,7 @@ public class Sintaxis {
     private BufferedWriter prefijoWriter = null;
     private String line = "";
     private boolean declaracion = true, ejecucion = false;
-    static private int numFilas = 39;
+    static private int numFilas = 40;
     static private int numColumnas = 86;
     static private String[][] matriz = new String[numFilas][numColumnas];
     private Stack<Integer> pilaSintactica, pilaAmbitos;
@@ -74,7 +78,42 @@ public class Sintaxis {
     private Sheet sheetSemantica;
     private Map<Integer, int[]> temporalesPorLinea = new TreeMap<>();
     private Map<Integer, List<String>> asignacionesPorLinea = new TreeMap<>();
-    
+
+    // Reglas semánticas 1 a 5 (se escriben en reglas.txt al terminar el análisis)
+    private static final String DESC_REGLA1 = "La expresión debe ser lógica";
+    private static final String DESC_REGLA2 = "El identificador debe ser del mismo tipo que la expresión";
+    private static final String DESC_REGLA3 = "La cantidad de dimensiones utilizadas en un arreglo debe ser igual a la declarada";
+    private static final String DESC_REGLA4 = "La expresión de una lista de arreglo debe ser entera";
+    private static final String DESC_REGLA5 = "Los límites de una lista de arreglo deben estar en el mismo rango de la declaración";
+
+    private List<ResultadoRegla> resultadosReglas = new LinkedList<>();
+    // Tamaños por dimensión de cada variable declarada, con clave "ámbito|lexema" (int[0] si no es arreglo).
+    private Map<String, int[]> arreglosDeclarados = new HashMap<>();
+    private String claveVarDeclarada;
+    private Stack<Contexto> pilaContextos = new Stack<>();
+    private Token ultimoIdVerificado;
+    private boolean ultimoIdDeclarado;
+
+    /** Una expresión que se evalúa aparte: una condición o un índice de arreglo. */
+    private static class Expresion {
+        int linea;
+        List<Token> tokens = new LinkedList<>();
+        StringBuilder texto = new StringBuilder();
+        Token resultado;
+        // Estado de la expresión de afuera, que se restaura al cerrar esta.
+        Stack<Token> operandosPrevios, operadoresPrevios;
+        boolean prefijoPrevio;
+    }
+
+    /** Condición (clave 1010-1013) o uso de un arreglo (id declarado y sus índices). */
+    private static class Contexto {
+        int clave;
+        Token arreglo;
+        boolean declarado;
+        Expresion actual;
+        List<Expresion> expresiones = new LinkedList<>();
+    }
+
     
     private int contPROGRAMA = 0, contLISTADEPARAMETROS = 0, contEXP_PAS = 0, contDECLARACIONCONSTANTES = 0, contOR = 0, contAND = 0, contFACTOR = 0, contCONSTSINSIGNO = 0, contCONSTNUMERICA = 0,
                 contELEVACION = 0, contTERMINOPASCAL = 0, contSIMPLEPASCAL = 0, contSTATU = 0, contARR = 0, contFUNCION = 0, contASIG = 0;
@@ -409,14 +448,14 @@ public class Sintaxis {
         producciones.put(88, Arrays.asList());
         producciones.put(89, Arrays.asList(-96, -49, 5, 30, -50));
         producciones.put(90, Arrays.asList(-97, -49, 5, -50));
-        producciones.put(91, Arrays.asList(-98, -49, 5, -50, 13, 36));
+        producciones.put(91, Arrays.asList(-98, -49, 824, 5, 828, -50, 13, 36));
         producciones.put(92, Arrays.asList());
-        producciones.put(93, Arrays.asList(-105, -49, 5, -50, 13, 36));
+        producciones.put(93, Arrays.asList(-105, -49, 825, 5, 828, -50, 13, 36));
         producciones.put(94, Arrays.asList(-104, 13));
         producciones.put(95, Arrays.asList(5));
         producciones.put(96, Arrays.asList(-45, 13, 18, -46));
-        producciones.put(97, Arrays.asList(-99, -49, 5, -50, 13));
-        producciones.put(98, Arrays.asList(-100, 13, -99, -49, 5, -50));
+        producciones.put(97, Arrays.asList(-99, -49, 826, 5, 828, -50, 13));
+        producciones.put(98, Arrays.asList(-100, 13, -99, -49, 827, 5, 828, -50));
         producciones.put(99, Arrays.asList(-101, 5));
         producciones.put(100, Arrays.asList(-102, -49, 802, 5, 30, 37, -50, 13, 803));
         producciones.put(101, Arrays.asList(-10, 5));
@@ -427,7 +466,7 @@ public class Sintaxis {
         producciones.put(106, Arrays.asList());
         producciones.put(107, Arrays.asList(-107, -10, 13, 18));
         producciones.put(108, Arrays.asList(-108, 5, -10, 13, 38));
-        producciones.put(109, Arrays.asList(820, -47, 5, 30, -48, 821));
+        producciones.put(109, Arrays.asList(820, -47, 822, 5, 823, 40, -48, 821));
         producciones.put(110, Arrays.asList(-78));
         producciones.put(111, Arrays.asList(-79, -49, 5, -50));
         producciones.put(112, Arrays.asList(-80, -49, 5, -7, 5, -50));
@@ -451,6 +490,8 @@ public class Sintaxis {
         producciones.put(130, Arrays.asList(817, -35, 812));
         producciones.put(131, Arrays.asList(817, -37, 812));
         producciones.put(132, Arrays.asList(817, -36, 812));
+        producciones.put(133, Arrays.asList(-7, 822, 5, 823, 40));
+        producciones.put(134, Arrays.asList());
         
         /*System.out.println("PRODUCCIONES");
         
@@ -773,6 +814,12 @@ public class Sintaxis {
                 
                 
                 
+                claveVarDeclarada = null;
+                if(insertada){
+                    claveVarDeclarada = pilaAmbitos.peek() + "|" + tokenActual.getLexema();
+                    arreglosDeclarados.put(claveVarDeclarada, new int[0]);
+                }
+
                 if(registroDeVar != null){
                     if(insertada){
                         conexionDB.asignarRegistro(tokenActual.getLexema(), pilaAmbitos.peek(), registroDeVar);
@@ -794,7 +841,18 @@ public class Sintaxis {
             else if (topePila == 806){ //AUMENTAR NUMERO DE DIMENSIONES
                 enArreglo = true;
                 numeroDimensiones++;
-                
+
+                if(claveVarDeclarada != null){
+                    int[] previas = arreglosDeclarados.get(claveVarDeclarada);
+                    int[] nuevas = Arrays.copyOf(previas, previas.length + 1);
+                    try{
+                        nuevas[previas.length] = Integer.parseInt(tokenActual.getLexema());
+                    }catch(NumberFormatException e){
+                        nuevas[previas.length] = Integer.MAX_VALUE; // tamaño no numérico: no se puede decidir el rango
+                    }
+                    arreglosDeclarados.put(claveVarDeclarada, nuevas);
+                }
+
                 if(numeroDimensiones == 1){
                     tamañoArreglo = tokenActual.getLexema();
                     conexionDB.aumentarArreglo(ultimaVar, tamañoArreglo, numeroDimensiones);
@@ -935,6 +993,8 @@ public class Sintaxis {
             }else if (topePila == 811){ //VERFICAR QUE EXISTE ID
                 //System.out.println("TOKEN ACTUAL = " + tokenActual.getLexema());
                 boolean declarado = verificarSimbolo(tokenActual);
+                ultimoIdVerificado = tokenActual;
+                ultimoIdDeclarado = declarado;
                 // Un id no declarado (o fuera de ámbito) se trata como Variant para no encadenar errores de tipo.
                 Token operando = declarado ? tokenActual
                         : new Token(Compatibilidad.tokenTemporal(Compatibilidad.VARIANT), tokenActual.getLexema(), tokenActual.getLinea());
@@ -1003,9 +1063,39 @@ public class Sintaxis {
                 pilaSintactica.pop();
             }else if(topePila == 820){ //ABRIR ÍNDICE DE ARREGLO
                 enIndice++;
+                Contexto arreglo = new Contexto();
+                arreglo.arreglo = ultimoIdVerificado;
+                arreglo.declarado = ultimoIdDeclarado;
+                pilaContextos.push(arreglo);
                 pilaSintactica.pop();
             }else if(topePila == 821){ //CERRAR ÍNDICE DE ARREGLO
                 enIndice--;
+                if(!pilaContextos.isEmpty()){
+                    verificarArreglo(pilaContextos.pop());
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 822){ //INICIO DE LA EXPRESIÓN DE UNA DIMENSIÓN
+                if(!pilaContextos.isEmpty()){
+                    abrirExpresion(pilaContextos.peek(), tokenActual.getLinea());
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 823){ //FIN DE LA EXPRESIÓN DE UNA DIMENSIÓN
+                if(!pilaContextos.isEmpty()){
+                    cerrarExpresion(pilaContextos.peek());
+                }
+                pilaSintactica.pop();
+            }else if(topePila >= 824 && topePila <= 827){ //ABRIR CONDICIÓN: if, elseif, while, do-while
+                Contexto condicion = new Contexto();
+                condicion.clave = 1010 + (topePila - 824);
+                pilaContextos.push(condicion);
+                abrirExpresion(condicion, tokenActual.getLinea());
+                pilaSintactica.pop();
+            }else if(topePila == 828){ //CERRAR CONDICIÓN
+                if(!pilaContextos.isEmpty()){
+                    Contexto condicion = pilaContextos.pop();
+                    cerrarExpresion(condicion);
+                    verificarCondicion(condicion);
+                }
                 pilaSintactica.pop();
             }else if(topePila == 818){ //INSERTAR ID DE REGISTRO
                 pilaSintactica.pop();
@@ -1081,6 +1171,7 @@ public class Sintaxis {
                         JOptionPane.showMessageDialog(null, "Verificación de sintaxis completada.");
                         break;
                     }
+                    registrarToken(tokenActual);
                     pilaSintactica.pop();
                     listaTokens.remove(0);
                 }else{
@@ -1174,6 +1265,7 @@ public class Sintaxis {
 
         
         llenarSemantica();
+        escribirReglas();
 
         Row row2 = sheetSintaxis.createRow(1);
         row2.createCell(0).setCellValue(listaErrores.size());
@@ -1248,12 +1340,12 @@ public class Sintaxis {
 
     /**
      * Llena la hoja "Semántica 1": una fila por línea con sus temporales, asignaciones y
-     * errores semánticos (547 a 555), y la fila de totales pegada a la última línea.
+     * errores semánticos (547 a 559), y la fila de totales pegada a la última línea.
      */
     private void llenarSemantica() {
         Map<Integer, Integer> erroresPorLinea = new TreeMap<>();
         for(Error error: listaErrores){
-            if(error.getNumeroError() >= 547 && error.getNumeroError() <= 555){
+            if(error.getNumeroError() >= 547 && error.getNumeroError() <= 559){
                 erroresPorLinea.merge(error.getLinea(), 1, Integer::sum);
             }
         }
@@ -1314,11 +1406,13 @@ public class Sintaxis {
             case -37: tabla = Compatibilidad.DIV; break;
             default: break;
         }
+        boolean aceptada = true;
         if(tabla >= 0){
             int valor = compatibilidad.consultar(tabla, tipoVariable, tipoValor);
             if(valor > 500){
                 listaErrores.add(new Error(valor, tokenAsignado.getLinea(), tokenIgual.getLexema(), TipoError.SEMANTICA));
                 tipoValor = Compatibilidad.VARIANT;
+                aceptada = false;
             }else{
                 tipoValor = Compatibilidad.tipoDeResultado(valor);
             }
@@ -1326,6 +1420,146 @@ public class Sintaxis {
 
         if(!Compatibilidad.cabe(tipoVariable, tipoValor)){
             listaErrores.add(new Error(555, tokenAsignado.getLinea(), tokenAsignado.getLexema(), TipoError.SEMANTICA));
+            aceptada = false;
+        }
+
+        // Regla 2: 1020 para =, 1021 para += y 1022 para -=, *= y /=. El error ya se agregó arriba.
+        int clave = 1022;
+        if(tokenIgual.getNumeroToken() == -33){
+            clave = 1020;
+        }else if(tokenIgual.getNumeroToken() == -34){
+            clave = 1021;
+        }
+        agregarResultado(tokenAsignado.getLinea(), 2, clave, DESC_REGLA2, aceptada, tokenAsignado.getLexema(), 0);
+    }
+
+    /**
+     * Registra una verificación de regla para reglas.txt. Si no se aceptó y se da un número de
+     * error (mayor a 0), también lo agrega a la lista de errores como semántico.
+     */
+    private void agregarResultado(int linea, int regla, int clave, String descripcion, boolean aceptada, String lexema, int numeroError) {
+        resultadosReglas.add(new ResultadoRegla(linea, regla, clave, descripcion, aceptada, lexema, pilaAmbitos.peek()));
+        if(!aceptada && numeroError > 0){
+            listaErrores.add(new Error(numeroError, linea, lexema, TipoError.SEMANTICA));
+        }
+    }
+
+    /**
+     * Empieza a evaluar una expresión aparte (condición o índice): guarda las pilas de la
+     * expresión de afuera y arranca unas limpias para no mezclar sus operandos.
+     */
+    private void abrirExpresion(Contexto contexto, int linea) {
+        Expresion expresion = new Expresion();
+        expresion.linea = linea;
+        expresion.operandosPrevios = pilaOperandos;
+        expresion.operadoresPrevios = pilaOperadores;
+        expresion.prefijoPrevio = insertandoPrefijo;
+        pilaOperandos = new Stack<>();
+        pilaOperadores = new Stack<>();
+        insertandoPrefijo = true;
+        contexto.actual = expresion;
+    }
+
+    /** Termina la expresión abierta: toma su resultado y restaura las pilas de afuera. */
+    private void cerrarExpresion(Contexto contexto) {
+        Expresion expresion = contexto.actual;
+        if(expresion == null){
+            return;
+        }
+        expresion.resultado = pilaOperandos.isEmpty() ? null : pilaOperandos.pop();
+        pilaOperandos = expresion.operandosPrevios;
+        pilaOperadores = expresion.operadoresPrevios;
+        insertandoPrefijo = expresion.prefijoPrevio;
+        contexto.expresiones.add(expresion);
+        contexto.actual = null;
+    }
+
+    /** Agrega el token consumido a todas las expresiones que están abiertas, para tener su texto y sus tokens. */
+    private void registrarToken(Token token) {
+        for(Contexto contexto: pilaContextos){
+            if(contexto.actual != null){
+                contexto.actual.tokens.add(token);
+                contexto.actual.texto.append(token.getLexema());
+            }
+        }
+    }
+
+    /** Regla 1 (claves 1010 a 1013): la expresión de la condición debe ser lógica. */
+    private void verificarCondicion(Contexto condicion) {
+        if(condicion.expresiones.isEmpty() || condicion.expresiones.get(0).resultado == null){
+            return;
+        }
+        Expresion expresion = condicion.expresiones.get(0);
+        int tipo = Compatibilidad.tipoDeToken(expresion.resultado.getNumeroToken());
+        // Variant (id no declarado o error previo en la expresión) no se vuelve a reportar.
+        boolean aceptada = tipo == 7 || tipo == Compatibilidad.VARIANT;
+        agregarResultado(expresion.linea, 1, condicion.clave, DESC_REGLA1, aceptada, expresion.texto.toString(), 556);
+    }
+
+    /** Tamaños declarados del id visible desde el ámbito actual, o null si no se declaró en ningún ámbito abierto. */
+    private int[] buscarDimensiones(String lexema) {
+        for(int i = pilaAmbitos.size() - 1; i >= 0; i--){
+            int[] tamaños = arreglosDeclarados.get(pilaAmbitos.get(i) + "|" + lexema);
+            if(tamaños != null){
+                return tamaños;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Reglas 3, 4 y 5 (claves 1030, 1040 y 1050) para un uso de arreglo. Primero la 3; si falla no se
+     * revisan las otras. Luego, por cada índice, la 4 y solo si pasa, la 5.
+     */
+    private void verificarArreglo(Contexto uso) {
+        Token id = uso.arreglo;
+        if(id == null || !uso.declarado){
+            return; // sin declarar: ya se reportó 540 o 541
+        }
+        int[] tamaños = buscarDimensiones(id.getLexema());
+        int declaradas = tamaños == null ? 0 : tamaños.length;
+
+        boolean mismasDimensiones = declaradas == uso.expresiones.size();
+        agregarResultado(id.getLinea(), 3, 1030, DESC_REGLA3, mismasDimensiones, id.getLexema(), 557);
+        if(!mismasDimensiones){
+            return;
+        }
+
+        for(int i = 0; i < declaradas; i++){
+            Expresion indice = uso.expresiones.get(i);
+            if(indice.resultado == null){
+                continue;
+            }
+            int tipo = Compatibilidad.tipoDeToken(indice.resultado.getNumeroToken());
+            // Entera: Bin, Dec, Oct o Hex. Variant no se vuelve a reportar.
+            boolean entera = tipo <= 3 || tipo == Compatibilidad.VARIANT;
+            agregarResultado(indice.linea, 4, 1040, DESC_REGLA4, entera, indice.texto.toString(), 558);
+            if(!entera){
+                continue;
+            }
+
+            // Solo se puede decidir el rango si el índice es una constante; con ids (x+A) se acepta.
+            Long valor = EvaluadorConstante.evaluar(indice.tokens);
+            boolean enRango = valor == null || (valor >= 0 && valor < tamaños[i]);
+            agregarResultado(indice.linea, 5, 1050, DESC_REGLA5, enRango, indice.texto.toString(), 559);
+        }
+    }
+
+    /** Escribe reglas.txt: una fila por verificación, separada por tabuladores y ordenada por línea. */
+    private void escribirReglas() {
+        List<ResultadoRegla> ordenados = new ArrayList<>(resultadosReglas);
+        ordenados.sort(Comparator.comparingInt(ResultadoRegla::getLinea)); // el orden es estable
+        try(BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("reglas.txt"), StandardCharsets.UTF_8))){
+            writer.write("Linea\tRegla\tClave\tDescripcion\tResultado\tLexema\tAmbito");
+            writer.newLine();
+            for(ResultadoRegla resultado: ordenados){
+                writer.write(resultado.getLinea() + "\t" + resultado.getRegla() + "\t" + resultado.getClave() + "\t"
+                        + resultado.getDescripcion() + "\t" + resultado.getResultado() + "\t"
+                        + resultado.getLexema().replaceAll("[\\t\\r\\n]", " ") + "\t" + resultado.getAmbito());
+                writer.newLine();
+            }
+        }catch(IOException e){
+            e.printStackTrace();
         }
     }
 
