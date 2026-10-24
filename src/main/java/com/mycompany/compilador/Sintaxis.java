@@ -46,7 +46,7 @@ public class Sintaxis {
     private HashMap<Integer, Integer> valorColumna;
     private BufferedReader reader = null;
     //private BufferedWriter areasWriter = null;
-    private BufferedWriter prefijoWriter = null;
+
     private String line = "";
     private boolean declaracion = true, ejecucion = false;
     static private int numFilas = 40;
@@ -132,7 +132,7 @@ public class Sintaxis {
             	matriz[i] = line.split(",");
             	i++;
             }
-            prefijoWriter = new BufferedWriter(new FileWriter("temporales.txt"));
+            
 
 
         	
@@ -1021,14 +1021,11 @@ public class Sintaxis {
                     Token resultado = pilaOperandos.pop();
                     verificarAsignacion(resultado);
 
-                    prefijoWriter.write("Linea " + tokenAsignado.getLinea() + ":");
-                    prefijoWriter.newLine();
+                    
                     for(String cuadruplo: cuadruplos){
-                        prefijoWriter.write(cuadruplo);
-                        prefijoWriter.newLine();
+                        
                     }
-                    prefijoWriter.write(tokenIgual.getLexema() + ", " + tokenAsignado.getLexema() + ", " + resultado.getLexema());
-                    prefijoWriter.newLine();
+                    
                 }
                 cuadruplos.clear();
 
@@ -1229,7 +1226,7 @@ public class Sintaxis {
         
         //System.out.println("AMBITOS TOTALES = " + contadorAmbitos);
         
-        prefijoWriter.close();
+        
         
         int erroresSintaxis = 0, erroresAmbito = 0, erroresSemantica = 0;
         for(Error error: listaErrores){
