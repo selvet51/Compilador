@@ -1,0 +1,13 @@
+Línea | Regla | Clave | Descripción                                               | Resultado | Lexema            | Ámbito
+7     | 1     | 1012  | La expresión debe ser lógica                              | ACEPT     | #DQ<#DB           | 1
+10    | 2     | 1021  | El identificador debe ser del mismo tipo que la expresión | ACEPT     | #DA               | 1
+11    | 2     | 1022  | El identificador debe ser del mismo tipo que la expresión | ERROR     | @B                | 1
+13    | 2     | 1020  | El identificador debe ser del mismo tipo que la expresión | ACEPT     | #DA               | 1
+15    | 2     | 1020  | El identificador debe ser del mismo tipo que la expresión | ACEPT     | ¡E                | 1
+17    | 2     | 1022  | El identificador debe ser del mismo tipo que la expresión | ACEPT     | #DB               | 1
+18    | 1     | 1013  | La expresión debe ser lógica                              | ACEPT     | #DA<#DB           | 1
+26    | 2     | 1020  | El identificador debe ser del mismo tipo que la expresión | ACEPT     | $D                | 2
+29    | 1     | 1013  | La expresión debe ser lógica                              | ACEPT     | ¡Q                | 2
+32    | 2     | 1020  | El identificador debe ser del mismo tipo que la expresión | ACEPT     | #DX               | 2
+39    | 1     | 1010  | La expresión debe ser lógica                              | ACEPT     | (#DX>5)&&(#DX<12) | 0
+42    | 1     | 1010  | La expresión debe ser lógica                              | ACEPT     | #DX<#DY+5         | 0

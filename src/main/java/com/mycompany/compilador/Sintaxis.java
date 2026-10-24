@@ -10,10 +10,20 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.Stack;
 import javax.swing.JOptionPane;
 import org.apache.poi.ss.usermodel.Row;
@@ -31,16 +41,18 @@ public class Sintaxis {
     private int numeroDimensiones = 0, numeroDeParametros = 0;
     private String tamañoArreglo;
     private String ultimaVar, ultimaConst, ultimaFunc, ultimoPar;
+    private String registroDeVar;
+    private int enIndice = 0;
     private HashMap<Integer, List<Integer>> producciones;
     private HashMap<Integer, String> valorNoTerminales;
     private HashMap<Integer, String> valorTokens;
     private HashMap<Integer, Integer> valorColumna;
     private BufferedReader reader = null;
     //private BufferedWriter areasWriter = null;
-    private BufferedWriter prefijoWriter = null;
+
     private String line = "";
     private boolean declaracion = true, ejecucion = false;
-    static private int numFilas = 39;
+    static private int numFilas = 40;
     static private int numColumnas = 86;
     static private String[][] matriz = new String[numFilas][numColumnas];
     private Stack<Integer> pilaSintactica, pilaAmbitos;
@@ -52,7 +64,10 @@ public class Sintaxis {
     
     private boolean insertandoPrefijo = false;
     private Stack<Token> pilaPrefijo, pilaOperadores;
-    private Stack<List<Token>> pilaOperandos;
+    private Stack<Token> pilaOperandos;
+    private Compatibilidad compatibilidad;
+    private int[] contadoresTemporales = new int[9];
+    private List<String> cuadruplos = new LinkedList<>();
     Token tokenAsignado, tokenIgual;
     
     private HashMap<Integer, Integer> erroresAmbitos;
@@ -63,7 +78,68 @@ public class Sintaxis {
     private Sheet sheetErrores;
     private Sheet sheetAmbito;
     private Sheet sheetSimbolos;
+    private Sheet sheetSemantica;
+    private Map<Integer, int[]> temporalesPorLinea = new TreeMap<>();
+    private Map<Integer, List<String>> asignacionesPorLinea = new TreeMap<>();
+
+    // Reglas semánticas 1 a 5 (se escriben en reglas.txt al terminar el análisis)
+    private static final String DESC_REGLA1 = "La expresión debe ser lógica";
+    private static final String DESC_REGLA2 = "El identificador debe ser del mismo tipo que la expresión";
+    private static final String DESC_REGLA3 = "La cantidad de dimensiones utilizadas en un arreglo debe ser igual a la declarada";
+    private static final String DESC_REGLA4 = "La expresión de una lista de arreglo debe ser entera";
+    private static final String DESC_REGLA5 = "Los límites de una lista de arreglo deben estar en el mismo rango de la declaración";
+
+    private static final String DESC_1060 = "PARA TIPO: la expresión del switch debe ser cadena o entera (#D)";
+    private static final String DESC_1061 = "PARA CASE: el caso debe ser cadena o entero (#D) y del mismo tipo que la expresión";
+    private static final String DESC_1070_INC = "Operador ++ o --: el identificador debe ser entero (#D)";
+    private static final String DESC_1070_NOT = "Operador !: el valor debe ser booleano";
+    private static final String DESC_1070_NEG = "Operador ~: el valor debe ser decimal, octal, binario o hexadecimal";
+    private static final String DESC_1080 = "FOR INICIALIZACION: el identificador y la expresión deben ser enteros (#D)";
+    private static final String DESC_1081 = "ID COMPARACION: la comparación debe ser lógica";
+    private static final String DESC_1082 = "INCREMENTO O DECREMENTO: el identificador debe ser entero (#D)";
+    private static final String DESC_1083 = "Manejo de cadenas: si el valor 2 es cadena, el valor 1 debe ser entero (#D)";
+    private static final String DESC_1084 = "Manejo de arreglos: el valor 2 debe ser un arreglo del mismo tipo que el valor 1";
+    private static final String DESC_1090 = "El identificador debe ser variable, parámetro o arreglo para recibir un valor";
+    private static final String DESC_1100 = "El identificador debe estar declarado antes de ser utilizado";
     
+    private List<ResultadoRegla> resultadosReglas = new LinkedList<>();
+    // Tamaños por dimensión de cada variable declarada, con clave "ámbito|lexema" (int[0] si no es arreglo).
+    private Map<String, int[]> arreglosDeclarados = new HashMap<>();
+    private String claveVarDeclarada;
+    private Stack<Contexto> pilaContextos = new Stack<>();
+    private Token ultimoIdVerificado;
+    // Ids usados que no están declarados (o están fuera de ámbito): se tratan como Variant.
+    private Set<Token> idsNoDeclarados = Collections.newSetFromMap(new IdentityHashMap<>());
+    private Token unarioPendiente;
+    private boolean ultimoIdDeclarado;
+
+    /** Una expresión que se evalúa aparte: una condición o un índice de arreglo. */
+    private static class Expresion {
+        int linea;
+        List<Token> tokens = new LinkedList<>();
+        StringBuilder texto = new StringBuilder();
+        Token resultado;
+        boolean aislada;
+        // Estado de la expresión de afuera, que se restaura al cerrar esta.
+        Stack<Token> operandosPrevios, operadoresPrevios;
+        boolean prefijoPrevio;
+    }
+
+    /** Condición (clave 1010-1013) o uso de un arreglo (id declarado y sus índices). */
+    private static class Contexto {
+        static final int CONDICION = 0, ARREGLO = 1, UNARIO = 2, SWITCH = 3, FOR = 4;
+        static final int FASE_INICIALIZACION = 0, FASE_COMPARACION = 1, FASE_INCREMENTO = 2;
+        int tipo = CONDICION;
+        String operador;
+        int fase;
+        Token valor1;
+        int clave;
+        Token arreglo;
+        boolean declarado;
+        Expresion actual;
+        List<Expresion> expresiones = new LinkedList<>();
+    }
+
     
     private int contPROGRAMA = 0, contLISTADEPARAMETROS = 0, contEXP_PAS = 0, contDECLARACIONCONSTANTES = 0, contOR = 0, contAND = 0, contFACTOR = 0, contCONSTSINSIGNO = 0, contCONSTNUMERICA = 0,
                 contELEVACION = 0, contTERMINOPASCAL = 0, contSIMPLEPASCAL = 0, contSTATU = 0, contARR = 0, contFUNCION = 0, contASIG = 0;
@@ -82,7 +158,7 @@ public class Sintaxis {
             	matriz[i] = line.split(",");
             	i++;
             }
-            prefijoWriter = new BufferedWriter(new FileWriter("prefijos.txt"));
+            
 
 
         	
@@ -295,6 +371,14 @@ public class Sintaxis {
         valorNoTerminales.put(816, "@"); //INSERTAR OPERADOR
         
         valorNoTerminales.put(817, "@"); //INSERTAR OPERADOR
+
+        valorNoTerminales.put(818, "@"); //INSERTAR ID DE REGISTRO
+
+        valorNoTerminales.put(819, "@"); //VERIFICAR TIPO REGISTRO DE UNA VARIABLE
+
+        valorNoTerminales.put(820, "@"); //ABRIR ÍNDICE DE ARREGLO
+
+        valorNoTerminales.put(821, "@"); //CERRAR ÍNDICE DE ARREGLO
         
         
         //AÑADIR A LA PILA
@@ -302,12 +386,12 @@ public class Sintaxis {
         
         producciones.put(1, Arrays.asList(17, -77, -49, -50, -45, 800, 13, 18, 801, -46));
         producciones.put(2, Arrays.asList());
-        producciones.put(3, Arrays.asList(-73, -60, -45, -60, 19, -46, 17));
+        producciones.put(3, Arrays.asList(-73, 818, -60, 802, -45, 809, -60, 19, 810, -46, 803, 17));
         producciones.put(4, Arrays.asList());
         producciones.put(5, Arrays.asList(-7, 809, -60, 19));
         producciones.put(6, Arrays.asList(-74, 20, 804, -60, 22, 23, 813, -9, 17));
         producciones.put(7, Arrays.asList());
-        producciones.put(8, Arrays.asList(-73, -60));
+        producciones.put(8, Arrays.asList(-73, 819, -60));
         producciones.put(9, Arrays.asList());
         producciones.put(10, Arrays.asList(-7, 806, -55, 21));
         producciones.put(11, Arrays.asList());
@@ -354,11 +438,11 @@ public class Sintaxis {
         producciones.put(52, Arrays.asList(16, 5, 32));
         producciones.put(53, Arrays.asList());
         producciones.put(54, Arrays.asList(-32, 5, -10, 5));
-        producciones.put(55, Arrays.asList(-1, 811, -60, 28));
-        producciones.put(56, Arrays.asList(-2, 811, -60, 28));
+        producciones.put(55, Arrays.asList(829, -1, 811, -60, 830, 28));
+        producciones.put(56, Arrays.asList(829, -2, 811, -60, 830, 28));
         producciones.put(57, Arrays.asList(-49, 5, -50));
-        producciones.put(58, Arrays.asList(-29, -49, 5, -50));
-        producciones.put(59, Arrays.asList(-3, -49, 5, -50));
+        producciones.put(58, Arrays.asList(-29, -49, 831, 5, 833, -50));
+        producciones.put(59, Arrays.asList(-3, -49, 832, 5, 833, -50));
         producciones.put(60, Arrays.asList(15));
         producciones.put(61, Arrays.asList(-58));
         producciones.put(62, Arrays.asList(-53));
@@ -390,25 +474,25 @@ public class Sintaxis {
         producciones.put(88, Arrays.asList());
         producciones.put(89, Arrays.asList(-96, -49, 5, 30, -50));
         producciones.put(90, Arrays.asList(-97, -49, 5, -50));
-        producciones.put(91, Arrays.asList(-98, -49, 5, -50, 13, 36));
+        producciones.put(91, Arrays.asList(-98, -49, 824, 5, 828, -50, 13, 36));
         producciones.put(92, Arrays.asList());
-        producciones.put(93, Arrays.asList(-105, -49, 5, -50, 13, 36));
+        producciones.put(93, Arrays.asList(-105, -49, 825, 5, 828, -50, 13, 36));
         producciones.put(94, Arrays.asList(-104, 13));
         producciones.put(95, Arrays.asList(5));
         producciones.put(96, Arrays.asList(-45, 13, 18, -46));
-        producciones.put(97, Arrays.asList(-99, -49, 5, -50, 13));
-        producciones.put(98, Arrays.asList(-100, 13, -99, -49, 5, -50));
+        producciones.put(97, Arrays.asList(-99, -49, 826, 5, 828, -50, 13));
+        producciones.put(98, Arrays.asList(-100, 13, -99, -49, 827, 5, 828, -50));
         producciones.put(99, Arrays.asList(-101, 5));
-        producciones.put(100, Arrays.asList(-102, -49, 5, 30, 37, -50, 13));
-        producciones.put(101, Arrays.asList(-10, 5));
-        producciones.put(102, Arrays.asList(813, -9, 13, 813, -9, 5, 30));
-        producciones.put(103, Arrays.asList(-103, -49, 5, -50, -45, -108, 5, -10, 13, 38, -46));
+        producciones.put(100, Arrays.asList(-102, -49, 802, 839, 5, 30, 37, -50, 13, 803));
+        producciones.put(101, Arrays.asList(-10, 840, 5, 841));
+        producciones.put(102, Arrays.asList(813, -9, 842, 13, 843, 813, -9, 844, 5, 813, 845, 30));
+        producciones.put(103, Arrays.asList(-103, -49, 834, 5, 835, -50, -45, -108, 836, 5, 837, -10, 13, 38, 838, -46));
         producciones.put(104, Arrays.asList(813, -9, 13, 38));
         producciones.put(105, Arrays.asList(-106, 39));
         producciones.put(106, Arrays.asList());
         producciones.put(107, Arrays.asList(-107, -10, 13, 18));
-        producciones.put(108, Arrays.asList(-108, 5, -10, 13, 38));
-        producciones.put(109, Arrays.asList(-47, 5, 30, -48));
+        producciones.put(108, Arrays.asList(-108, 836, 5, 837, -10, 13, 38));
+        producciones.put(109, Arrays.asList(820, -47, 822, 5, 823, 40, -48, 821));
         producciones.put(110, Arrays.asList(-78));
         producciones.put(111, Arrays.asList(-79, -49, 5, -50));
         producciones.put(112, Arrays.asList(-80, -49, 5, -7, 5, -50));
@@ -432,6 +516,8 @@ public class Sintaxis {
         producciones.put(130, Arrays.asList(817, -35, 812));
         producciones.put(131, Arrays.asList(817, -37, 812));
         producciones.put(132, Arrays.asList(817, -36, 812));
+        producciones.put(133, Arrays.asList(-7, 822, 5, 823, 40));
+        producciones.put(134, Arrays.asList());
         
         /*System.out.println("PRODUCCIONES");
         
@@ -555,7 +641,8 @@ public class Sintaxis {
         pilaSintactica = new Stack<>();
         pilaAmbitos = new Stack<>();
         pilaPrefijo = new Stack<>();
-        pilaOperandos = new Stack<List<Token>>();
+        pilaOperandos = new Stack<>();
+        compatibilidad = new Compatibilidad();
         pilaOperadores = new Stack<>();
         
         pilaAmbitos.add(contadorAmbitos);
@@ -617,6 +704,16 @@ public class Sintaxis {
         row5.createCell(6).setCellValue("NoPar");
         row5.createCell(7).setCellValue("TParr");
         
+        
+        //SHEET DE SEMÁNTICA 1
+        sheetSemantica = wb.createSheet("Semántica 1");
+        
+        String[] encabezadoSemantica = {"Linea", "TBin", "TDec", "TOct", "THex", "TReal", "Texp", "TCadena", "TBoolean", "TVariant", "Asignaciones", "Errores"};
+        Row rowSemantica = sheetSemantica.createRow(0);
+        for(int c = 0; c < encabezadoSemantica.length; c++){
+            rowSemantica.createCell(c).setCellValue(encabezadoSemantica[c]);
+        }
+        sheetSemantica.setColumnWidth(10, 40 * 256);
         
     }
     
@@ -703,11 +800,16 @@ public class Sintaxis {
                     case -67: tipo = "Booleano"; break;
                     default: break;
                 }
+                if(registroDeVar != null){
+                    tipo = "Registro";
+                }
+                boolean insertada = false;
                 ambitos = conexionDB.buscarPorId(tokenActual.getLexema());
                 if(ambitos.isEmpty()){
                     if(conexionDB.insertarVariable(tokenActual.getLexema(), tipo, "Variable", pilaAmbitos.peek(), tokenActual.getLinea())){
                         //System.out.println("Se ha insertado correctamente la variable.");
                         ultimaVar = tokenActual.getLexema();
+                        insertada = true;
                     }else{
                         //System.out.println("No se ha insertado nada.");
                     }
@@ -722,12 +824,13 @@ public class Sintaxis {
                     }
                     if(encontrado){
                         erroresAmbitosCont++;
-                        erroresAmbitos.put(contadorAmbitos, erroresAmbitos.get(contadorAmbitos) + 1);
+                        erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
                         listaErrores.add(new Error(542, tokenActual.getLinea(), tokenActual.getLexema(), TipoError.AMBITO));
                     }else{
                         if(conexionDB.insertarVariable(tokenActual.getLexema(), tipo, "Variable", pilaAmbitos.peek(), tokenActual.getLinea())){
                             //System.out.println("Se ha insertado correctamente la variable.");
                             ultimaVar = tokenActual.getLexema();
+                            insertada = true;
                         }else{
                             //System.out.println("No se ha insertado nada.");
                         }
@@ -737,6 +840,19 @@ public class Sintaxis {
                 
                 
                 
+                claveVarDeclarada = null;
+                if(insertada){
+                    claveVarDeclarada = pilaAmbitos.peek() + "|" + tokenActual.getLexema();
+                    arreglosDeclarados.put(claveVarDeclarada, new int[0]);
+                }
+
+                if(registroDeVar != null){
+                    if(insertada){
+                        conexionDB.asignarRegistro(tokenActual.getLexema(), pilaAmbitos.peek(), registroDeVar);
+                    }
+                    registroDeVar = null;
+                }
+
                 //System.out.println("PEEK PILA SINTACTICA: " + pilaSintactica.peek());
                 //System.out.println(tokenActual.getLexema());
             }
@@ -751,7 +867,18 @@ public class Sintaxis {
             else if (topePila == 806){ //AUMENTAR NUMERO DE DIMENSIONES
                 enArreglo = true;
                 numeroDimensiones++;
-                
+
+                if(claveVarDeclarada != null){
+                    int[] previas = arreglosDeclarados.get(claveVarDeclarada);
+                    int[] nuevas = Arrays.copyOf(previas, previas.length + 1);
+                    try{
+                        nuevas[previas.length] = Integer.parseInt(tokenActual.getLexema());
+                    }catch(NumberFormatException e){
+                        nuevas[previas.length] = Integer.MAX_VALUE; // tamaño no numérico: no se puede decidir el rango
+                    }
+                    arreglosDeclarados.put(claveVarDeclarada, nuevas);
+                }
+
                 if(numeroDimensiones == 1){
                     tamañoArreglo = tokenActual.getLexema();
                     conexionDB.aumentarArreglo(ultimaVar, tamañoArreglo, numeroDimensiones);
@@ -795,7 +922,7 @@ public class Sintaxis {
                     }
                     if(encontrado){
                         erroresAmbitosCont++;
-                        erroresAmbitos.put(contadorAmbitos, erroresAmbitos.get(contadorAmbitos) + 1);
+                        erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
                         listaErrores.add(new Error(542, tokenActual.getLinea(), tokenActual.getLexema(), TipoError.AMBITO));
                     }else{
                         if(conexionDB.insertarVariable(tokenActual.getLexema(), tipo, "Constante", pilaAmbitos.peek(), tokenActual.getLinea())){
@@ -891,78 +1018,45 @@ public class Sintaxis {
                 
             }else if (topePila == 811){ //VERFICAR QUE EXISTE ID
                 //System.out.println("TOKEN ACTUAL = " + tokenActual.getLexema());
-                boolean coincide = false;
-                ambitos = conexionDB.verificarSimbolo(tokenActual.getLexema());
-                //System.out.println("LISTA DE AMBITOS ARROJADA POR BASE DE DATOS = " + ambitos);
-                //System.out.println("PILA DE AMBITOS = " + pilaAmbitos);
-                
-                if(!ambitos.isEmpty()){
-                    for(Integer ambito: ambitos){
-                        for (int i = 0; i < pilaAmbitos.size(); i++) {
-                            if(ambito == pilaAmbitos.get(i)){
-                                coincide = true;
-                                
-                                break;
-                            }
-                        }  
-                    }
-                    if(coincide){
-                        //System.out.println("SE HA ENCONTRADO EL SÍMBOLO DECLARADO.");
-                    }else{
-                        erroresAmbitosCont++;
-                        erroresAmbitos.put(contadorAmbitos, erroresAmbitos.get(contadorAmbitos) + 1);
-                        listaErrores.add(new Error(541, tokenActual.getLinea(), tokenActual.getLexema(), TipoError.AMBITO));
-                    }
-                    
-                }else{
-                    erroresAmbitosCont++;
-                    erroresAmbitos.put(contadorAmbitos, erroresAmbitos.get(contadorAmbitos) + 1);
-                    //System.out.println("EL SÍMBOLO NO ESTÁ DECLARADO.");
-                    listaErrores.add(new Error(540, tokenActual.getLinea(), tokenActual.getLexema(), TipoError.AMBITO));
+                boolean declarado = verificarSimbolo(tokenActual);
+                ultimoIdVerificado = tokenActual;
+                ultimoIdDeclarado = declarado;
+                if(!declarado){
+                    idsNoDeclarados.add(tokenActual);
                 }
+                // Un id no declarado (o fuera de ámbito) se trata como Variant para no encadenar errores de tipo.
+                Token operando = declarado ? tokenActual
+                        : new Token(Compatibilidad.tokenTemporal(Compatibilidad.VARIANT), tokenActual.getLexema(), tokenActual.getLinea());
                 if(insertandoPrefijo){
-                    List<Token> hoja = new LinkedList<>();
-                    hoja.add(tokenActual);
-                    pilaOperandos.push(hoja);
-                    //pilaPrefijo.push(tokenActual);
-                    //System.out.println("Se ha insertado el operando " + tokenActual.getLexema());
+                    pilaOperandos.push(operando);
                 }else{
-                    tokenAsignado = tokenActual;
+                    if(enIndice == 0){
+                        tokenAsignado = operando;
+                    }
                 }
                 
-                coincide = false;
                 pilaSintactica.pop();
                 
             }else if(topePila == 812){ //ACTIVAR ZONA DE INFIJO A PREFIJO
                 insertandoPrefijo = true;
-                
-                
+                pilaOperandos.clear();
+                pilaOperadores.clear();
+                cuadruplos.clear();
                 pilaSintactica.pop();
             }else if(topePila == 813){ //DESACTIVAR ZONA DE INFIJO A POSTFIJO
                 insertandoPrefijo = false;
 
                 if(!pilaOperandos.isEmpty()){
-                    List<Token> expresion = pilaOperandos.pop();
+                    Token resultado = pilaOperandos.pop();
+                    verificarAsignacion(resultado);
 
-                    List<Token> completa = new LinkedList<>();
-                    completa.add(tokenIgual);
-                    completa.add(tokenAsignado);
-                    completa.addAll(expresion);
-
-                    StringBuilder sb = new StringBuilder();
-                    for(Token t : completa){
-                        sb.append(t.getLexema()).append(" ");
+                    
+                    for(String cuadruplo: cuadruplos){
+                        
                     }
                     
-                    System.out.println("Ultimo: " + completa.getLast());
-                    System.out.println("Primero: " + completa.getFirst());
-                    
-                    asignarTemporales(completa);
-                    
-                    System.out.println("Prefijo: " + sb.toString().trim());
-                    prefijoWriter.write("Linea " + tokenActual.getLinea() + ": " + sb.toString().trim());
-                    prefijoWriter.newLine();
                 }
+                cuadruplos.clear();
 
                 pilaOperandos.clear();
                 pilaOperadores.clear();
@@ -970,11 +1064,7 @@ public class Sintaxis {
             }
             else if(topePila == 814){ //INSERTAR OPERANDO A PILA PREFIJO
                 if(insertandoPrefijo){
-                    List<Token> hoja = new LinkedList<>();
-                    hoja.add(tokenActual);
-                    pilaOperandos.push(hoja);
-                    //pilaPrefijo.push(tokenActual);
-                    System.out.println("Se ha insertado el operando " + tokenActual.getLexema());
+                    pilaOperandos.push(tokenActual);
                 }
                 
                 
@@ -982,29 +1072,159 @@ public class Sintaxis {
             }else if(topePila == 815){ //INSERTAR OPERADOR A PILA PREFIJO
                 if(insertandoPrefijo){
                     pilaOperadores.push(tokenActual);
-                    //pilaPrefijo.push(tokenActual);
-                    System.out.println("Se ha insertado el operador " + tokenActual.getLexema());
                 }
                 
                 
                 pilaSintactica.pop();
             }else if(topePila == 816){
-                if(insertandoPrefijo){
-                    List<Token> derecho = pilaOperandos.pop();
-                    List<Token> izquierdo = pilaOperandos.pop();
+                if(insertandoPrefijo && pilaOperandos.size() >= 2 && !pilaOperadores.isEmpty()){
+                    Token derecho = pilaOperandos.pop();
+                    Token izquierdo = pilaOperandos.pop();
                     Token operador = pilaOperadores.pop();
-
-                    List<Token> bloque = new LinkedList<>();
-                    bloque.add(operador);
-                    bloque.addAll(izquierdo);
-                    bloque.addAll(derecho);
-
-                    pilaOperandos.push(bloque);
+                    pilaOperandos.push(generarTemporal(operador, izquierdo, derecho));
                 }
                 pilaSintactica.pop();
             }else if(topePila == 817){ //CAPTURAR TOKEN DE ASIGNACIÓN
                 tokenIgual = tokenActual;
                 pilaSintactica.pop();
+            }else if(topePila == 820){ //ABRIR ÍNDICE DE ARREGLO
+                enIndice++;
+                Contexto arreglo = new Contexto();
+                arreglo.tipo = Contexto.ARREGLO;
+                arreglo.arreglo = ultimoIdVerificado;
+                arreglo.declarado = ultimoIdDeclarado;
+                pilaContextos.push(arreglo);
+                pilaSintactica.pop();
+            }else if(topePila == 821){ //CERRAR ÍNDICE DE ARREGLO
+                enIndice--;
+                if(!pilaContextos.isEmpty()){
+                    verificarArreglo(pilaContextos.pop());
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 822){ //INICIO DE LA EXPRESIÓN DE UNA DIMENSIÓN
+                if(!pilaContextos.isEmpty()){
+                    abrirExpresion(pilaContextos.peek(), tokenActual.getLinea());
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 823){ //FIN DE LA EXPRESIÓN DE UNA DIMENSIÓN
+                if(!pilaContextos.isEmpty()){
+                    cerrarExpresion(pilaContextos.peek());
+                }
+                pilaSintactica.pop();
+            }else if(topePila >= 824 && topePila <= 827){ //ABRIR CONDICIÓN: if, elseif, while, do-while
+                Contexto condicion = new Contexto();
+                condicion.clave = 1010 + (topePila - 824);
+                pilaContextos.push(condicion);
+                abrirExpresion(condicion, tokenActual.getLinea());
+                pilaSintactica.pop();
+            }else if(topePila == 828){ //CERRAR CONDICIÓN
+                if(!pilaContextos.isEmpty()){
+                    Contexto condicion = pilaContextos.pop();
+                    cerrarExpresion(condicion);
+                    verificarCondicion(condicion);
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 829){ //GUARDAR EL OPERADOR ++ O --
+                unarioPendiente = tokenActual;
+                pilaSintactica.pop();
+            }else if(topePila == 830){ //VERIFICAR ++ O -- (REGLA 7)
+                verificarIncrementoUnario();
+                pilaSintactica.pop();
+            }else if(topePila == 831 || topePila == 832){ //ABRIR ! O ~
+                Contexto unario = new Contexto();
+                unario.tipo = Contexto.UNARIO;
+                unario.operador = topePila == 831 ? "!" : "~";
+                pilaContextos.push(unario);
+                abrirExpresion(unario, tokenActual.getLinea());
+                pilaSintactica.pop();
+            }else if(topePila == 833){ //CERRAR ! O ~ (REGLA 7)
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.UNARIO){
+                    Contexto unario = pilaContextos.pop();
+                    cerrarExpresion(unario);
+                    verificarUnario(unario);
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 834){ //ABRIR SWITCH Y SU EXPRESIÓN
+                Contexto cambio = new Contexto();
+                cambio.tipo = Contexto.SWITCH;
+                pilaContextos.push(cambio);
+                abrirExpresion(cambio, tokenActual.getLinea());
+                pilaSintactica.pop();
+            }else if(topePila == 835 || topePila == 837){ //CERRAR LA EXPRESIÓN DEL SWITCH O DE UN CASE
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.SWITCH){
+                    cerrarExpresion(pilaContextos.peek());
+                    if(topePila == 835){
+                        verificarExpresionSwitch(pilaContextos.peek());
+                    }
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 836){ //ABRIR LA EXPRESIÓN DE UN CASE
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.SWITCH){
+                    abrirExpresion(pilaContextos.peek(), tokenActual.getLinea());
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 838){ //CERRAR SWITCH (REGLA 6)
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.SWITCH){
+                    verificarSwitch(pilaContextos.pop());
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 839){ //ABRIR FOR
+                Contexto ciclo = new Contexto();
+                ciclo.tipo = Contexto.FOR;
+                ciclo.fase = Contexto.FASE_INICIALIZACION;
+                pilaContextos.push(ciclo);
+                pilaSintactica.pop();
+            }else if(topePila == 840){ //FOR DE CADENAS O ARREGLOS: ABRIR EL VALOR 2
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.FOR){
+                    Contexto ciclo = pilaContextos.peek();
+                    ciclo.valor1 = tokenAsignado;
+                    abrirExpresion(ciclo, tokenActual.getLinea());
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 841){ //FOR DE CADENAS O ARREGLOS: CERRAR EL VALOR 2 (REGLA 8)
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.FOR){
+                    Contexto ciclo = pilaContextos.pop();
+                    cerrarExpresion(ciclo);
+                    verificarForEach(ciclo);
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 842){ //FOR: ABRIR LA COMPARACIÓN
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.FOR){
+                    Contexto ciclo = pilaContextos.peek();
+                    ciclo.fase = Contexto.FASE_COMPARACION;
+                    abrirExpresion(ciclo, tokenActual.getLinea());
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 843){ //FOR: CERRAR LA COMPARACIÓN (CLAVE 1081)
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.FOR){
+                    Contexto ciclo = pilaContextos.peek();
+                    cerrarExpresion(ciclo);
+                    verificarComparacionFor(ciclo);
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 844){ //FOR: ABRIR EL INCREMENTO (no aísla las pilas: puede ser una asignación)
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.FOR){
+                    Contexto ciclo = pilaContextos.peek();
+                    ciclo.fase = Contexto.FASE_INCREMENTO;
+                    capturarExpresion(ciclo, tokenActual.getLinea());
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 845){ //FOR: CERRAR EL INCREMENTO (CLAVE 1082)
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.FOR){
+                    Contexto ciclo = pilaContextos.pop();
+                    cerrarExpresion(ciclo);
+                    verificarIncrementoFor(ciclo);
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 818){ //INSERTAR ID DE REGISTRO
+                pilaSintactica.pop();
+                if(insertarSimbolo(tokenActual, "Registro", "Registro")){
+                    ultimaFunc = tokenActual.getLexema();
+                }
+            }else if(topePila == 819){ //VERIFICAR QUE EL REGISTRO DE UNA VARIABLE EXISTE
+                pilaSintactica.pop();
+                verificarSimbolo(tokenActual);
+                registroDeVar = tokenActual.getLexema();
             }
             else if(topePila > 0){ //ES NO TERMINAL
                 
@@ -1070,6 +1290,7 @@ public class Sintaxis {
                         JOptionPane.showMessageDialog(null, "Verificación de sintaxis completada.");
                         break;
                     }
+                    registrarToken(tokenActual);
                     pilaSintactica.pop();
                     listaTokens.remove(0);
                 }else{
@@ -1091,7 +1312,13 @@ public class Sintaxis {
         
         int[][] arregloTabla = conexionDB.tablaAmbitos(contadorAmbitos + 1);
         
-        totales = conexionDB.tablaTotales();
+        totales = new LinkedList<>();
+        for(int i = 0; i < contadorAmbitos + 1; i++){
+            totales.add(0);
+        }
+        for(Simbolo simbolo: simbolos){
+            totales.set(simbolo.getAmbito(), totales.get(simbolo.getAmbito()) + 1);
+        }
         
          List<Integer> filaTotal = conexionDB.ObtenerTotalesSImbolos();
         
@@ -1104,7 +1331,7 @@ public class Sintaxis {
             rowAmbito.createCell(9).setCellValue(erroresAmbitos.get(i));
             rowAmbito.createCell(10).setCellValue(erroresAmbitos.get(i) + totales.get(i));
         }
-        Row rowFinal = sheetAmbito.createRow(contadorAmbitos + 1);
+        Row rowFinal = sheetAmbito.createRow(contadorAmbitos + 2);
         
         rowFinal.createCell(0).setCellValue("Totales");
         rowFinal.createCell(1).setCellValue(filaTotal.get(0));
@@ -1121,9 +1348,20 @@ public class Sintaxis {
         
         //System.out.println("AMBITOS TOTALES = " + contadorAmbitos);
         
-        prefijoWriter.close();
         
-        JOptionPane.showMessageDialog(null, "Hay un total de " + listaErrores.size() + " error(es) en sintáxis o ámbitos.");
+        
+        int erroresSintaxis = 0, erroresAmbito = 0, erroresSemantica = 0;
+        for(Error error: listaErrores){
+            switch(error.getTipoError()){
+                case "Sintáxis": erroresSintaxis++; break;
+                case "Ámbitos": erroresAmbito++; break;
+                case "Semántica": erroresSemantica++; break;
+                default: break;
+            }
+        }
+        JOptionPane.showMessageDialog(null, "Hay un total de " + erroresSintaxis + " error(es) de sintáxis.\n"
+                + "Hay un total de " + erroresAmbito + " error(es) de ámbito.\n"
+                + "Hay un total de " + erroresSemantica + " error(es) de semántica.");
         
         System.out.println("Pila de prefijo: " + pilaPrefijo);
         
@@ -1145,6 +1383,9 @@ public class Sintaxis {
 
 
         
+        llenarSemantica();
+        escribirReglas();
+
         Row row2 = sheetSintaxis.createRow(1);
         row2.createCell(0).setCellValue(listaErrores.size());
 	row2.createCell(1).setCellValue(contPROGRAMA);
@@ -1177,9 +1418,517 @@ public class Sintaxis {
         return Integer.parseInt(matriz[fila - 1][columna - 1]);
     }
 
-    private void asignarTemporales(List<Token> completa) {
-        
+    /** Revisa que el id esté declarado en un ámbito visible; si no, agrega el error 540 o 541 y regresa false. */
+    private boolean verificarSimbolo(Token token) {
+        ambitos = conexionDB.verificarSimbolo(token.getLexema());
+
+        if(!ambitos.isEmpty()){
+            boolean coincide = false;
+            for(Integer ambito: ambitos){
+                if(pilaAmbitos.contains(ambito)){
+                    coincide = true;
+                    break;
+                }
+            }
+            if(!coincide){
+                erroresAmbitosCont++;
+                erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
+                listaErrores.add(new Error(541, token.getLinea(), token.getLexema(), TipoError.AMBITO));
+                agregarResultado(token.getLinea(), 10, 1100, DESC_1100, false, token.getLexema(), 0);
+                return false;
+            }
+        }else{
+            erroresAmbitosCont++;
+            erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
+            listaErrores.add(new Error(540, token.getLinea(), token.getLexema(), TipoError.AMBITO));
+            agregarResultado(token.getLinea(), 10, 1100, DESC_1100, false, token.getLexema(), 0);
+            return false;
+        }
+        agregarResultado(token.getLinea(), 10, 1100, DESC_1100, true, token.getLexema(), 0);
+        return true;
     }
-    
-    
+
+    /** Inserta el id en el ámbito actual; si ya existe en él agrega el error 542. */
+    private boolean insertarSimbolo(Token token, String tipo, String clase) {
+        ambitos = conexionDB.buscarPorId(token.getLexema());
+        if(ambitos.contains(pilaAmbitos.peek())){
+            erroresAmbitosCont++;
+            erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
+            listaErrores.add(new Error(542, token.getLinea(), token.getLexema(), TipoError.AMBITO));
+            return false;
+        }
+        return conexionDB.insertarVariable(token.getLexema(), tipo, clase, pilaAmbitos.peek(), token.getLinea());
+    }
+
+    /**
+     * Llena la hoja "Semántica 1": una fila por línea con sus temporales, asignaciones y
+     * errores semánticos (547 a 570), y la fila de totales pegada a la última línea.
+     */
+    private void llenarSemantica() {
+        Map<Integer, Integer> erroresPorLinea = new TreeMap<>();
+        for(Error error: listaErrores){
+            if(error.getNumeroError() >= 547 && error.getNumeroError() <= 570){
+                erroresPorLinea.merge(error.getLinea(), 1, Integer::sum);
+            }
+        }
+
+        TreeSet<Integer> lineas = new TreeSet<>(temporalesPorLinea.keySet());
+        lineas.addAll(asignacionesPorLinea.keySet());
+        lineas.addAll(erroresPorLinea.keySet());
+
+        int[] totalTemporales = new int[9];
+        int totalAsignaciones = 0, totalErrores = 0;
+        int fila = 0;
+
+        for(int linea: lineas){
+            Row row = sheetSemantica.createRow(++fila);
+            row.createCell(0).setCellValue(linea);
+
+            int[] temporales = temporalesPorLinea.getOrDefault(linea, new int[9]);
+            for(int i = 0; i < 9; i++){
+                row.createCell(i + 1).setCellValue(temporales[i]);
+                totalTemporales[i] += temporales[i];
+            }
+
+            List<String> asignaciones = asignacionesPorLinea.getOrDefault(linea, new LinkedList<>());
+            row.createCell(10).setCellValue(String.join("; ", asignaciones));
+            totalAsignaciones += asignaciones.size();
+
+            int errores = erroresPorLinea.getOrDefault(linea, 0);
+            row.createCell(11).setCellValue(errores);
+            totalErrores += errores;
+        }
+
+        Row rowTotales = sheetSemantica.createRow(++fila);
+        rowTotales.createCell(0).setCellValue("Totales");
+        for(int i = 0; i < 9; i++){
+            rowTotales.createCell(i + 1).setCellValue(totalTemporales[i]);
+        }
+        rowTotales.createCell(10).setCellValue(totalAsignaciones);
+        rowTotales.createCell(11).setCellValue(totalErrores);
+    }
+
+    /**
+     * Revisa que el resultado de la expresión quepa en la variable asignada (error 555).
+     * En asignaciones compuestas se evalúa como x = x op expresión.
+     */
+    private void verificarAsignacion(Token resultado) {
+        int tipoVariable = Compatibilidad.tipoDeToken(tokenAsignado.getNumeroToken());
+        int tipoValor = Compatibilidad.tipoDeToken(resultado.getNumeroToken());
+        int tipoResultado = tipoValor;
+        asignacionesPorLinea.computeIfAbsent(tokenAsignado.getLinea(), k -> new LinkedList<>())
+                .add(tokenAsignado.getLexema() + " -> " + Compatibilidad.nombreTipo(tipoValor));
+        // La asignación cuenta como un temporal Variant en la hoja "Semántica 1".
+        temporalesPorLinea.computeIfAbsent(tokenAsignado.getLinea(), k -> new int[9])[Compatibilidad.VARIANT]++;
+
+        int tabla = -1;
+        switch(tokenIgual.getNumeroToken()){
+            case -34: tabla = Compatibilidad.SUMA; break;
+            case -35: tabla = Compatibilidad.RESTA; break;
+            case -36: tabla = Compatibilidad.MULT; break;
+            case -37: tabla = Compatibilidad.DIV; break;
+            default: break;
+        }
+        boolean aceptada = true;
+        if(tabla >= 0){
+            int valor = compatibilidad.consultar(tabla, tipoVariable, tipoValor);
+            if(valor > 500){
+                listaErrores.add(new Error(valor, tokenAsignado.getLinea(), tokenIgual.getLexema(), TipoError.SEMANTICA));
+                tipoValor = Compatibilidad.VARIANT;
+                aceptada = false;
+            }else{
+                tipoValor = Compatibilidad.tipoDeResultado(valor);
+            }
+        }
+
+        if(!Compatibilidad.cabe(tipoVariable, tipoValor)){
+            listaErrores.add(new Error(555, tokenAsignado.getLinea(), tokenAsignado.getLexema(), TipoError.SEMANTICA));
+            aceptada = false;
+        }
+
+        // Regla 2: 1020 para =, 1021 para += y 1022 para -=, *= y /=. El error ya se agregó arriba.
+        int clave = 1022;
+        if(tokenIgual.getNumeroToken() == -33){
+            clave = 1020;
+        }else if(tokenIgual.getNumeroToken() == -34){
+            clave = 1021;
+        }
+        agregarResultado(tokenAsignado.getLinea(), 2, clave, DESC_REGLA2, aceptada, tokenAsignado.getLexema(), 0);
+
+        // Regla 9: solo variable, parámetro o arreglo pueden recibir un valor. Un id sin declarar (Variant) se acepta.
+        String clase = claseDeSimbolo(tokenAsignado.getLexema());
+        boolean recibe = clase == null || clase.equals("Variable") || clase.equals("Parametro") || clase.equals("Arreglo");
+        agregarResultado(tokenAsignado.getLinea(), 9, 1090, DESC_1090, recibe, tokenAsignado.getLexema(), 570);
+
+        // Clave 1080: la inicialización de un for debe ser entera (id y expresión).
+        if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.FOR
+                && pilaContextos.peek().fase == Contexto.FASE_INICIALIZACION){
+            boolean entera = esEnteroOVariant(tipoVariable) && esEnteroOVariant(tipoResultado);
+            agregarResultado(tokenAsignado.getLinea(), 8, 1080, DESC_1080, entera, tokenAsignado.getLexema(), 565);
+        }
+    }
+
+    /** Clase del símbolo (Variable, Parametro, Arreglo, Función...) visible desde el ámbito actual, o null si no existe. */
+    private String claseDeSimbolo(String lexema) {
+        List<Simbolo> simbolos = conexionDB.mostrarSimbolos();
+        for(int i = pilaAmbitos.size() - 1; i >= 0; i--){
+            for(Simbolo simbolo: simbolos){
+                if(simbolo.getId().equals(lexema) && simbolo.getAmbito() == pilaAmbitos.get(i)){
+                    return simbolo.getClase();
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Tipo de un id usado: Variant si no está declarado, si no el que le da su prefijo. */
+    private int tipoDeId(Token id) {
+        return idsNoDeclarados.contains(id) ? Compatibilidad.VARIANT : Compatibilidad.tipoDeToken(id.getNumeroToken());
+    }
+
+    private boolean esEnteroOVariant(int tipo) {
+        return tipo == 1 || tipo == Compatibilidad.VARIANT;
+    }
+
+    /** Regla 7 con ++ o --: el id que sigue al operador debe ser entero (#D). */
+    private void verificarIncrementoUnario() {
+        if(unarioPendiente == null || ultimoIdVerificado == null){
+            return;
+        }
+        boolean aceptada = esEnteroOVariant(tipoDeId(ultimoIdVerificado));
+        agregarResultado(ultimoIdVerificado.getLinea(), 7, 1070, DESC_1070_INC, aceptada,
+                unarioPendiente.getLexema() + ultimoIdVerificado.getLexema(), 562);
+    }
+
+    /**
+     * Regla 7 con ! o ~: revisa el valor de ( OR ) y deja en la pila de afuera el resultado del operador,
+     * porque el contexto aislado se lo quitó (! da un Boolean y ~ conserva el tipo).
+     */
+    private void verificarUnario(Contexto unario) {
+        if(unario.expresiones.isEmpty()){
+            return;
+        }
+        Expresion expresion = unario.expresiones.get(0);
+        if(expresion.resultado == null){
+            return;
+        }
+        int tipo = Compatibilidad.tipoDeToken(expresion.resultado.getNumeroToken());
+        boolean negacion = unario.operador.equals("!");
+        boolean aceptada;
+        if(negacion){
+            aceptada = tipo == 7 || tipo == Compatibilidad.VARIANT;
+        }else{
+            aceptada = tipo <= 3 || tipo == Compatibilidad.VARIANT;
+        }
+        agregarResultado(expresion.linea, 7, 1070, negacion ? DESC_1070_NOT : DESC_1070_NEG, aceptada,
+                unario.operador + "(" + expresion.texto + ")", negacion ? 563 : 564);
+        if(insertandoPrefijo){
+            pilaOperandos.push(negacion
+                    ? new Token(Compatibilidad.tokenTemporal(7), "!" + expresion.resultado.getLexema(), expresion.linea)
+                    : expresion.resultado);
+        }
+    }
+
+    /** Un tipo válido para switch y case: cadena (6) o decimal (1). */
+    private boolean esCadenaODecimal(int tipo) {
+        return tipo == 1 || tipo == 6;
+    }
+
+    /** Regla 6, clave 1060: la expresión del switch es cadena o #D (Variant se acepta). */
+    private void verificarExpresionSwitch(Contexto cambio) {
+        if(cambio.expresiones.isEmpty() || cambio.expresiones.get(0).resultado == null){
+            return;
+        }
+        Expresion exp = cambio.expresiones.get(0);
+        int tipoExp = Compatibilidad.tipoDeToken(exp.resultado.getNumeroToken());
+        boolean expValida = esCadenaODecimal(tipoExp) || tipoExp == Compatibilidad.VARIANT;
+        agregarResultado(exp.linea, 6, 1060, DESC_1060, expValida, exp.texto.toString(), 560);
+    }
+
+    /**
+     * Regla 6, clave 1061: cada case es cadena o #D y del mismo tipo que la expresión. Si la expresión
+     * es Variant o dio ERROR en 1060, su tipo es el del primer case válido. Se revisan todos los case.
+     */
+    private void verificarSwitch(Contexto cambio) {
+        if(cambio.expresiones.isEmpty() || cambio.expresiones.get(0).resultado == null){
+            return;
+        }
+        Expresion exp = cambio.expresiones.get(0);
+        int tipoExp = Compatibilidad.tipoDeToken(exp.resultado.getNumeroToken());
+
+        List<Expresion> casos = cambio.expresiones.subList(1, cambio.expresiones.size());
+        int tipoEfectivo = esCadenaODecimal(tipoExp) ? tipoExp : -1;
+        if(tipoEfectivo < 0){
+            for(Expresion caso: casos){
+                if(caso.resultado != null && esCadenaODecimal(Compatibilidad.tipoDeToken(caso.resultado.getNumeroToken()))){
+                    tipoEfectivo = Compatibilidad.tipoDeToken(caso.resultado.getNumeroToken());
+                    break;
+                }
+            }
+        }
+        for(Expresion caso: casos){
+            if(caso.resultado == null){
+                continue;
+            }
+            int tipoCaso = Compatibilidad.tipoDeToken(caso.resultado.getNumeroToken());
+            boolean aceptado = tipoCaso == Compatibilidad.VARIANT
+                    || (esCadenaODecimal(tipoCaso) && (tipoEfectivo < 0 || tipoCaso == tipoEfectivo));
+            agregarResultado(caso.linea, 6, 1061, DESC_1061, aceptado, caso.texto.toString(), 561);
+        }
+    }
+
+    /** Clave 1081: la comparación del for debe ser lógica. */
+    private void verificarComparacionFor(Contexto ciclo) {
+        Expresion comparacion = ciclo.expresiones.isEmpty() ? null : ciclo.expresiones.get(ciclo.expresiones.size() - 1);
+        if(comparacion == null || comparacion.resultado == null){
+            return;
+        }
+        int tipo = Compatibilidad.tipoDeToken(comparacion.resultado.getNumeroToken());
+        boolean aceptada = tipo == 7 || tipo == Compatibilidad.VARIANT;
+        agregarResultado(comparacion.linea, 8, 1081, DESC_1081, aceptada, comparacion.texto.toString(), 566);
+    }
+
+    /** Clave 1082: el incremento es ++x, --x o una asignación sobre un id entero (#D). Otra cosa es ERROR. */
+    private void verificarIncrementoFor(Contexto ciclo) {
+        Expresion incremento = ciclo.expresiones.isEmpty() ? null : ciclo.expresiones.get(ciclo.expresiones.size() - 1);
+        if(incremento == null || incremento.tokens.isEmpty()){
+            return;
+        }
+        Token id = null;
+        int primero = incremento.tokens.get(0).getNumeroToken();
+        if((primero == -1 || primero == -2) && incremento.tokens.size() > 1){
+            id = incremento.tokens.get(1);
+        }else{
+            for(Token token: incremento.tokens){
+                if(token.getNumeroToken() <= -33 && token.getNumeroToken() >= -37){
+                    id = incremento.tokens.get(0);
+                    break;
+                }
+            }
+        }
+        boolean aceptada = id != null && esEnteroOVariant(tipoDeId(id));
+        agregarResultado(incremento.linea, 8, 1082, DESC_1082, aceptada, incremento.texto.toString(), 567);
+    }
+
+    /**
+     * Claves 1083 y 1084: for(valor1 : valor2). Si valor2 es cadena, valor1 debe ser #D (1083). Si es arreglo,
+     * valor1 debe ser del mismo tipo (1084). Un valor2 Variant se toma como arreglo del tipo de valor1; si
+     * ambos son Variant se aceptan las dos claves.
+     */
+    private void verificarForEach(Contexto ciclo) {
+        if(ciclo.valor1 == null || ciclo.expresiones.isEmpty() || ciclo.expresiones.get(0).resultado == null){
+            return;
+        }
+        Expresion valor2 = ciclo.expresiones.get(0);
+        int tipo1 = Compatibilidad.tipoDeToken(ciclo.valor1.getNumeroToken());
+        int tipo2 = Compatibilidad.tipoDeToken(valor2.resultado.getNumeroToken());
+        boolean variant1 = tipo1 == Compatibilidad.VARIANT, variant2 = tipo2 == Compatibilidad.VARIANT;
+        String lexema = ciclo.valor1.getLexema() + " : " + valor2.texto;
+
+        boolean esArreglo = false;
+        if(valor2.tokens.size() == 1 && !idsNoDeclarados.contains(valor2.tokens.get(0))){
+            int[] dimensiones = buscarDimensiones(valor2.tokens.get(0).getLexema());
+            esArreglo = dimensiones != null && dimensiones.length > 0;
+        }
+
+        if(esArreglo){
+            boolean aceptada = variant1 || variant2 || tipo1 == tipo2;
+            agregarResultado(valor2.linea, 8, 1084, DESC_1084, aceptada, lexema, 569);
+        }else if(variant2){
+            if(variant1){
+                agregarResultado(valor2.linea, 8, 1083, DESC_1083, true, lexema, 568);
+            }
+            agregarResultado(valor2.linea, 8, 1084, DESC_1084, true, lexema, 569);
+        }else if(tipo2 == 6){
+            agregarResultado(valor2.linea, 8, 1083, DESC_1083, variant1 || tipo1 == 1, lexema, 568);
+        }else{
+            agregarResultado(valor2.linea, 8, 1084, DESC_1084, false, lexema, 569); // no es cadena ni arreglo
+        }
+    }
+
+    /**
+     * Registra una verificación de regla para reglas.txt. Si no se aceptó y se da un número de
+     * error (mayor a 0), también lo agrega a la lista de errores como semántico.
+     */
+    private void agregarResultado(int linea, int regla, int clave, String descripcion, boolean aceptada, String lexema, int numeroError) {
+        resultadosReglas.add(new ResultadoRegla(linea, regla, clave, descripcion, aceptada, lexema, pilaAmbitos.peek()));
+        if(!aceptada && numeroError > 0){
+            listaErrores.add(new Error(numeroError, linea, lexema, TipoError.SEMANTICA));
+        }
+    }
+
+    /**
+     * Empieza a evaluar una expresión aparte (condición o índice): guarda las pilas de la
+     * expresión de afuera y arranca unas limpias para no mezclar sus operandos.
+     */
+    private void abrirExpresion(Contexto contexto, int linea) {
+        Expresion expresion = new Expresion();
+        expresion.linea = linea;
+        expresion.operandosPrevios = pilaOperandos;
+        expresion.operadoresPrevios = pilaOperadores;
+        expresion.prefijoPrevio = insertandoPrefijo;
+        expresion.aislada = true;
+        pilaOperandos = new Stack<>();
+        pilaOperadores = new Stack<>();
+        insertandoPrefijo = true;
+        contexto.actual = expresion;
+    }
+
+    /** Como abrirExpresion pero sin tocar las pilas: solo junta los tokens y el texto (para un incremento que puede ser asignación). */
+    private void capturarExpresion(Contexto contexto, int linea) {
+        Expresion expresion = new Expresion();
+        expresion.linea = linea;
+        contexto.actual = expresion;
+    }
+
+    /** Termina la expresión abierta: toma su resultado y restaura las pilas de afuera. */
+    private void cerrarExpresion(Contexto contexto) {
+        Expresion expresion = contexto.actual;
+        if(expresion == null){
+            return;
+        }
+        if(expresion.aislada){
+            expresion.resultado = pilaOperandos.isEmpty() ? null : pilaOperandos.pop();
+            pilaOperandos = expresion.operandosPrevios;
+            pilaOperadores = expresion.operadoresPrevios;
+            insertandoPrefijo = expresion.prefijoPrevio;
+        }
+        contexto.expresiones.add(expresion);
+        contexto.actual = null;
+    }
+
+    /** Agrega el token consumido a todas las expresiones que están abiertas, para tener su texto y sus tokens. */
+    private void registrarToken(Token token) {
+        for(Contexto contexto: pilaContextos){
+            if(contexto.actual != null){
+                contexto.actual.tokens.add(token);
+                contexto.actual.texto.append(token.getLexema());
+            }
+        }
+    }
+
+    /** Regla 1 (claves 1010 a 1013): la expresión de la condición debe ser lógica. */
+    private void verificarCondicion(Contexto condicion) {
+        if(condicion.expresiones.isEmpty() || condicion.expresiones.get(0).resultado == null){
+            return;
+        }
+        Expresion expresion = condicion.expresiones.get(0);
+        int tipo = Compatibilidad.tipoDeToken(expresion.resultado.getNumeroToken());
+        // Variant (id no declarado o error previo en la expresión) no se vuelve a reportar.
+        boolean aceptada = tipo == 7 || tipo == Compatibilidad.VARIANT;
+        agregarResultado(expresion.linea, 1, condicion.clave, DESC_REGLA1, aceptada, expresion.texto.toString(), 556);
+    }
+
+    /** Tamaños declarados del id visible desde el ámbito actual, o null si no se declaró en ningún ámbito abierto. */
+    private int[] buscarDimensiones(String lexema) {
+        for(int i = pilaAmbitos.size() - 1; i >= 0; i--){
+            int[] tamaños = arreglosDeclarados.get(pilaAmbitos.get(i) + "|" + lexema);
+            if(tamaños != null){
+                return tamaños;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Reglas 3, 4 y 5 (claves 1030, 1040 y 1050) para un uso de arreglo. Primero la 3; si falla no se
+     * revisan las otras. Luego, por cada índice, la 4 y solo si pasa, la 5.
+     */
+    private void verificarArreglo(Contexto uso) {
+        Token id = uso.arreglo;
+        if(id == null || !uso.declarado){
+            return; // sin declarar: ya se reportó 540 o 541
+        }
+        int[] tamaños = buscarDimensiones(id.getLexema());
+        int declaradas = tamaños == null ? 0 : tamaños.length;
+
+        boolean mismasDimensiones = declaradas == uso.expresiones.size();
+        agregarResultado(id.getLinea(), 3, 1030, DESC_REGLA3, mismasDimensiones, id.getLexema(), 557);
+        if(!mismasDimensiones){
+            return;
+        }
+
+        for(int i = 0; i < declaradas; i++){
+            Expresion indice = uso.expresiones.get(i);
+            if(indice.resultado == null){
+                continue;
+            }
+            int tipo = Compatibilidad.tipoDeToken(indice.resultado.getNumeroToken());
+            // Entera: Bin, Dec, Oct o Hex. Variant no se vuelve a reportar.
+            boolean entera = tipo <= 3 || tipo == Compatibilidad.VARIANT;
+            agregarResultado(indice.linea, 4, 1040, DESC_REGLA4, entera, indice.texto.toString(), 558);
+            if(!entera){
+                continue;
+            }
+
+            // Solo se puede decidir el rango si el índice es una constante; con ids (x+A) se acepta.
+            Long valor = EvaluadorConstante.evaluar(indice.tokens);
+            boolean enRango = valor == null || (valor >= 0 && valor < tamaños[i]);
+            agregarResultado(indice.linea, 5, 1050, DESC_REGLA5, enRango, indice.texto.toString(), 559);
+        }
+    }
+
+    /** Escribe reglas.txt: una línea por verificación, con las columnas alineadas y ordenada por línea. */
+    private void escribirReglas() {
+        List<ResultadoRegla> ordenados = new ArrayList<>(resultadosReglas);
+        ordenados.sort(Comparator.comparingInt(ResultadoRegla::getLinea)); // el orden es estable
+
+        List<String[]> filas = new ArrayList<>();
+        filas.add(new String[]{"Línea", "Regla", "Clave", "Descripción", "Resultado", "Lexema", "Ámbito"});
+        for(ResultadoRegla resultado: ordenados){
+            filas.add(new String[]{String.valueOf(resultado.getLinea()), String.valueOf(resultado.getRegla()),
+                String.valueOf(resultado.getClave()), resultado.getDescripcion(), resultado.getResultado(),
+                resultado.getLexema().replaceAll("[\\t\\r\\n]", " "), String.valueOf(resultado.getAmbito())});
+        }
+
+        int[] anchos = new int[7];
+        for(String[] fila: filas){
+            for(int i = 0; i < 7; i++){
+                anchos[i] = Math.max(anchos[i], fila[i].length());
+            }
+        }
+
+        try(BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("reglas.txt"), StandardCharsets.UTF_8))){
+            for(String[] fila: filas){
+                StringBuilder linea = new StringBuilder();
+                for(int i = 0; i < 7; i++){
+                    if(i > 0){
+                        linea.append(" | ");
+                    }
+                    linea.append(i == 6 ? fila[i] : String.format("%-" + anchos[i] + "s", fila[i]));
+                }
+                writer.write(linea.toString());
+                writer.newLine();
+            }
+        }catch(IOException e){
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Consulta la matriz de compatibilidad con (izquierdo, derecho), registra el
+     * cuádruplo "operador, izquierdo, derecho, temporal" y regresa el temporal.
+     * Si los tipos son incompatibles se reporta el error y el temporal es Variant.
+     */
+    private Token generarTemporal(Token operador, Token izquierdo, Token derecho) {
+        int tabla = Compatibilidad.tablaDeOperador(operador.getNumeroToken());
+        int tipo = Compatibilidad.VARIANT;
+
+        if(tabla >= 0){
+            int valor = compatibilidad.consultar(tabla,
+                    Compatibilidad.tipoDeToken(izquierdo.getNumeroToken()),
+                    Compatibilidad.tipoDeToken(derecho.getNumeroToken()));
+            if(valor > 500){
+                listaErrores.add(new Error(valor, operador.getLinea(), operador.getLexema(), TipoError.SEMANTICA));
+            }else{
+                tipo = Compatibilidad.tipoDeResultado(valor);
+            }
+        }
+
+        String nombre = Compatibilidad.prefijoTemporal(tipo) + (++contadoresTemporales[tipo]);
+        Token temporal = new Token(Compatibilidad.tokenTemporal(tipo), nombre, operador.getLinea());
+        temporalesPorLinea.computeIfAbsent(operador.getLinea(), k -> new int[9])[tipo]++;
+        cuadruplos.add(operador.getLexema() + ", " + izquierdo.getLexema() + ", " + derecho.getLexema() + ", " + nombre);
+        return temporal;
+    }
 }
