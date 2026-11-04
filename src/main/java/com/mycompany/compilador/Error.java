@@ -81,6 +81,13 @@ public class Error {
                         case 568: descripcion = "En el for de cadenas, el valor 1 debe ser entero."; break;
                         case 569: descripcion = "En el for de arreglos, el valor 2 debe ser un arreglo del mismo tipo que el valor 1."; break;
                         case 570: descripcion = "El identificador no puede recibir un valor (solo variable, parámetro o arreglo)."; break;
+                        case 571: descripcion = "El identificador del procedimiento debe ser de clase procedimiento."; break;
+                        case 572: descripcion = "El identificador de la función debe ser de clase función."; break;
+                        case 573: descripcion = "La función debe tener por lo menos un return."; break;
+                        case 574: descripcion = "El return debe ser del mismo tipo que la función."; break;
+                        case 575: descripcion = "Un procedimiento no debe tener return."; break;
+                        case 576: descripcion = "La cantidad de parámetros no es igual a la declarada."; break;
+                        case 577: descripcion = "El tipo del parámetro no es igual al declarado."; break;
 			default:  descripcion = "Error no identificado."; break;
 		}
 		this.linea = linea;

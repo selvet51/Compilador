@@ -52,7 +52,7 @@ public class Sintaxis {
 
     private String line = "";
     private boolean declaracion = true, ejecucion = false;
-    static private int numFilas = 40;
+    static private int numFilas = 41;
     static private int numColumnas = 86;
     static private String[][] matriz = new String[numFilas][numColumnas];
     private Stack<Integer> pilaSintactica, pilaAmbitos;
@@ -101,6 +101,13 @@ public class Sintaxis {
     private static final String DESC_1084 = "Manejo de arreglos: el valor 2 debe ser un arreglo del mismo tipo que el valor 1";
     private static final String DESC_1090 = "El identificador debe ser variable, parámetro o arreglo para recibir un valor";
     private static final String DESC_1100 = "El identificador debe estar declarado antes de ser utilizado";
+    private static final String DESC_1110 = "El identificador debe ser de clase procedimiento al declarar un procedimiento";
+    private static final String DESC_1120 = "El identificador debe ser de clase función al declarar una función";
+    private static final String DESC_1130 = "La función debe contener por lo menos un return";
+    private static final String DESC_1131 = "El return debe ser del mismo tipo que la función";
+    private static final String DESC_1140 = "Un procedimiento no debe tener return";
+    private static final String DESC_1150 = "La cantidad de parámetros debe ser igual a la declarada";
+    private static final String DESC_1160 = "El tipo del parámetro debe ser igual al declarado";
     
     private List<ResultadoRegla> resultadosReglas = new LinkedList<>();
     // Tamaños por dimensión de cada variable declarada, con clave "ámbito|lexema" (int[0] si no es arreglo).
@@ -111,6 +118,19 @@ public class Sintaxis {
     // Ids usados que no están declarados (o están fuera de ámbito): se tratan como Variant.
     private Set<Token> idsNoDeclarados = Collections.newSetFromMap(new IdentityHashMap<>());
     private Token unarioPendiente;
+    
+    /** Función o procedimiento declarado con def: sus parámetros y cuántos return lleva. */
+    private static class Funcion {
+        Token id;
+        int tipo;
+        boolean procedimiento;
+        List<Integer> tiposParametros = new ArrayList<>();
+        int returns;
+    }
+    private Stack<Funcion> pilaFunciones = new Stack<>();
+    // Funciones declaradas, con clave "ámbito|lexema".
+    private Map<String, Funcion> funcionesDeclaradas = new HashMap<>();
+    private Funcion funcionEnParametros;
     private boolean ultimoIdDeclarado;
 
     /** Una expresión que se evalúa aparte: una condición o un índice de arreglo. */
@@ -127,7 +147,7 @@ public class Sintaxis {
 
     /** Condición (clave 1010-1013) o uso de un arreglo (id declarado y sus índices). */
     private static class Contexto {
-        static final int CONDICION = 0, ARREGLO = 1, UNARIO = 2, SWITCH = 3, FOR = 4;
+        static final int CONDICION = 0, ARREGLO = 1, UNARIO = 2, SWITCH = 3, FOR = 4, RETURN = 5, LLAMADA = 6;
         static final int FASE_INICIALIZACION = 0, FASE_COMPARACION = 1, FASE_INCREMENTO = 2;
         int tipo = CONDICION;
         String operador;
@@ -398,7 +418,7 @@ public class Sintaxis {
         producciones.put(12, Arrays.asList(-47, 806, -55, 21, 805, -48));
         producciones.put(13, Arrays.asList());
         producciones.put(14, Arrays.asList(-7, 20, 804, -60, 22, 23));
-        producciones.put(15, Arrays.asList(-75, 808, -60, 802, 2, 1, 803, 813, -9, 17));
+        producciones.put(15, Arrays.asList(-75, 808, -60, 802, 2, 1, 803, 848, 813, -9, 17));
         producciones.put(16, Arrays.asList(807, -60, -33, 814, 4, 24, 813, -9, 17));
         producciones.put(17, Arrays.asList());
         producciones.put(18, Arrays.asList(-7, 807, -60, -33, 814, 4, 24));
@@ -426,8 +446,8 @@ public class Sintaxis {
         producciones.put(40, Arrays.asList(815, -5, 3, 816, 27));
         producciones.put(41, Arrays.asList(814, 4));
         producciones.put(42, Arrays.asList(811, -60, 28));
-        producciones.put(43, Arrays.asList(-49, 29, -50));
-        producciones.put(44, Arrays.asList(5, 30));
+        producciones.put(43, Arrays.asList(-49, 849, 29, 850, -50));
+        producciones.put(44, Arrays.asList(851, 5, 852, 41));
         producciones.put(45, Arrays.asList());
         producciones.put(46, Arrays.asList(-7, 5, 30));
         producciones.put(47, Arrays.asList());
@@ -482,7 +502,7 @@ public class Sintaxis {
         producciones.put(96, Arrays.asList(-45, 13, 18, -46));
         producciones.put(97, Arrays.asList(-99, -49, 826, 5, 828, -50, 13));
         producciones.put(98, Arrays.asList(-100, 13, -99, -49, 827, 5, 828, -50));
-        producciones.put(99, Arrays.asList(-101, 5));
+        producciones.put(99, Arrays.asList(-101, 846, 5, 847));
         producciones.put(100, Arrays.asList(-102, -49, 802, 839, 5, 30, 37, -50, 13, 803));
         producciones.put(101, Arrays.asList(-10, 840, 5, 841));
         producciones.put(102, Arrays.asList(813, -9, 842, 13, 843, 813, -9, 844, 5, 813, 845, 30));
@@ -518,6 +538,8 @@ public class Sintaxis {
         producciones.put(132, Arrays.asList(817, -36, 812));
         producciones.put(133, Arrays.asList(-7, 822, 5, 823, 40));
         producciones.put(134, Arrays.asList());
+        producciones.put(135, Arrays.asList(-7, 851, 5, 852, 41));
+        producciones.put(136, Arrays.asList());
         
         /*System.out.println("PRODUCCIONES");
         
@@ -951,11 +973,16 @@ public class Sintaxis {
                     case -67: tipo = "Booleano"; break;
                     default: break;
                 }
+                // Sin prefijo (token -109) es procedimiento; con prefijo es función.
+                boolean procedimiento = tokenActual.getNumeroToken() == -109;
+                String claseFuncion = procedimiento ? "Procedimiento" : "Función";
+                boolean insertada = false;
                 ambitos = conexionDB.buscarPorId(tokenActual.getLexema());
                 if(ambitos.isEmpty()){
-                    if(conexionDB.insertarVariable(tokenActual.getLexema(), tipo, "Función", pilaAmbitos.peek(), tokenActual.getLinea())){
+                    if(conexionDB.insertarVariable(tokenActual.getLexema(), tipo, claseFuncion, pilaAmbitos.peek(), tokenActual.getLinea())){
                         //System.out.println("Se ha insertado correctamente la función.");
                         ultimaFunc = tokenActual.getLexema();
+                        insertada = true;
                     }else{
                         //System.out.println("No se ha insertado nada.");
                     }
@@ -971,16 +998,17 @@ public class Sintaxis {
                     if(encontrado){
                         listaErrores.add(new Error(542, tokenActual.getLinea(), tokenActual.getLexema(), TipoError.AMBITO));
                     }else{
-                        if(conexionDB.insertarVariable(tokenActual.getLexema(), tipo, "Función", pilaAmbitos.peek(), tokenActual.getLinea())){
+                        if(conexionDB.insertarVariable(tokenActual.getLexema(), tipo, claseFuncion, pilaAmbitos.peek(), tokenActual.getLinea())){
                             //System.out.println("Se ha insertado correctamente la función.");
                             ultimaFunc = tokenActual.getLexema();
+                            insertada = true;
                         }else{
                             //System.out.println("No se ha insertado nada.");
                         }
                     }
                 }
                 
-                
+                declararFuncion(tokenActual, procedimiento, insertada);
                 
                 //System.out.println("PEEK PILA SINTACTICA: " + pilaSintactica.peek());
                 //System.out.println(tokenActual.getLexema());
@@ -998,6 +1026,9 @@ public class Sintaxis {
                     case -67: tipo = "Booleano"; break;
                     default: break;
                 }
+                if(funcionEnParametros != null){
+                    funcionEnParametros.tiposParametros.add(Compatibilidad.tipoDeToken(tokenActual.getNumeroToken()));
+                }
                 if(conexionDB.insertarParametro(tokenActual.getLexema(), tipo, "Parametro", pilaAmbitos.peek(), ultimaFunc, ++numeroDeParametros, tokenActual.getLinea())){
                     //System.out.println("Se ha insertado correctamente el parámetro.");
                     ultimoPar = tokenActual.getLexema();
@@ -1008,6 +1039,7 @@ public class Sintaxis {
                 //System.out.println(tokenActual.getLexema());
             }else if (topePila == 810){ //FINAL DE PARÁMETROS DE FUNCION
                 numeroDeParametros = 0;
+                funcionEnParametros = null;
                 if(conexionDB.actualizarAmbitoFuncion(ultimaFunc, pilaAmbitos.peek().toString())){
                     //System.out.println("Se ha actualizado la función (se agregó ámbito que crea).");
                 }else{
@@ -1214,6 +1246,46 @@ public class Sintaxis {
                     Contexto ciclo = pilaContextos.pop();
                     cerrarExpresion(ciclo);
                     verificarIncrementoFor(ciclo);
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 846){ //ABRIR LA EXPRESIÓN DEL RETURN
+                Contexto retorno = new Contexto();
+                retorno.tipo = Contexto.RETURN;
+                pilaContextos.push(retorno);
+                abrirExpresion(retorno, tokenActual.getLinea());
+                pilaSintactica.pop();
+            }else if(topePila == 847){ //CERRAR EL RETURN (REGLAS 13 Y 14)
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.RETURN){
+                    Contexto retorno = pilaContextos.pop();
+                    cerrarExpresion(retorno);
+                    verificarReturn(retorno);
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 848){ //FIN DE LA FUNCIÓN O PROCEDIMIENTO (REGLAS 13 Y 14)
+                if(!pilaFunciones.isEmpty()){
+                    terminarFuncion(pilaFunciones.pop());
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 849){ //ABRIR LLAMADA A FUNCIÓN O PROCEDIMIENTO
+                Contexto llamada = new Contexto();
+                llamada.tipo = Contexto.LLAMADA;
+                llamada.arreglo = ultimoIdVerificado;
+                llamada.declarado = ultimoIdDeclarado;
+                pilaContextos.push(llamada);
+                pilaSintactica.pop();
+            }else if(topePila == 850){ //CERRAR LLAMADA (REGLAS 15 Y 16)
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.LLAMADA){
+                    verificarLlamada(pilaContextos.pop());
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 851){ //ABRIR UN ARGUMENTO
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.LLAMADA){
+                    abrirExpresion(pilaContextos.peek(), tokenActual.getLinea());
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 852){ //CERRAR UN ARGUMENTO
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.LLAMADA){
+                    cerrarExpresion(pilaContextos.peek());
                 }
                 pilaSintactica.pop();
             }else if(topePila == 818){ //INSERTAR ID DE REGISTRO
@@ -1462,12 +1534,12 @@ public class Sintaxis {
 
     /**
      * Llena la hoja "Semántica 1": una fila por línea con sus temporales, asignaciones y
-     * errores semánticos (547 a 570), y la fila de totales pegada a la última línea.
+     * errores semánticos (547 a 577), y la fila de totales pegada a la última línea.
      */
     private void llenarSemantica() {
         Map<Integer, Integer> erroresPorLinea = new TreeMap<>();
         for(Error error: listaErrores){
-            if(error.getNumeroError() >= 547 && error.getNumeroError() <= 570){
+            if(error.getNumeroError() >= 547 && error.getNumeroError() <= 577){
                 erroresPorLinea.merge(error.getLinea(), 1, Integer::sum);
             }
         }
@@ -1865,6 +1937,101 @@ public class Sintaxis {
             Long valor = EvaluadorConstante.evaluar(indice.tokens);
             boolean enRango = valor == null || (valor >= 0 && valor < tamaños[i]);
             agregarResultado(indice.linea, 5, 1050, DESC_REGLA5, enRango, indice.texto.toString(), 559);
+        }
+    }
+
+    /**
+     * Reglas 11 y 12 al declarar con def: un id sin prefijo debe quedar con clase Procedimiento (1110)
+     * y uno con prefijo con clase Función (1120). Deja la función lista para sus parámetros y returns.
+     */
+    private void declararFuncion(Token id, boolean procedimiento, boolean insertada) {
+        Funcion funcion = new Funcion();
+        funcion.id = id;
+        funcion.procedimiento = procedimiento;
+        funcion.tipo = Compatibilidad.tipoDeToken(id.getNumeroToken());
+        if(insertada){
+            funcionesDeclaradas.put(pilaAmbitos.peek() + "|" + id.getLexema(), funcion);
+        }
+        pilaFunciones.push(funcion);
+        funcionEnParametros = funcion;
+
+        String clase = claseDeSimbolo(id.getLexema());
+        if(procedimiento){
+            agregarResultado(id.getLinea(), 11, 1110, DESC_1110, "Procedimiento".equals(clase), id.getLexema(), 571);
+        }else{
+            agregarResultado(id.getLinea(), 12, 1120, DESC_1120, "Función".equals(clase), id.getLexema(), 572);
+        }
+    }
+
+    /** Función o procedimiento visible desde el ámbito actual, o null si no hay. */
+    private Funcion buscarFuncion(String lexema) {
+        for(int i = pilaAmbitos.size() - 1; i >= 0; i--){
+            Funcion funcion = funcionesDeclaradas.get(pilaAmbitos.get(i) + "|" + lexema);
+            if(funcion != null){
+                return funcion;
+            }
+        }
+        return null;
+    }
+
+    /** Regla 13, clave 1131: el return de una función debe ser de su tipo. Regla 14, clave 1140: un procedimiento no lleva return. */
+    private void verificarReturn(Contexto retorno) {
+        if(pilaFunciones.isEmpty() || retorno.expresiones.isEmpty()){
+            return; // return fuera de una función
+        }
+        Funcion funcion = pilaFunciones.peek();
+        funcion.returns++;
+        Expresion expresion = retorno.expresiones.get(0);
+        String lexema = "return " + expresion.texto;
+        if(funcion.procedimiento){
+            agregarResultado(expresion.linea, 14, 1140, DESC_1140, false, lexema, 575);
+            return;
+        }
+        int tipo = expresion.resultado == null ? Compatibilidad.VARIANT : Compatibilidad.tipoDeToken(expresion.resultado.getNumeroToken());
+        agregarResultado(expresion.linea, 13, 1131, DESC_1131, Compatibilidad.cabe(funcion.tipo, tipo), lexema, 574);
+    }
+
+    /**
+     * Al terminar una función, clave 1130: debe tener por lo menos un return. Un procedimiento sin return
+     * da 1140 ACEPT. Las filas llevan la línea del def para que salgan antes que las de sus return.
+     */
+    private void terminarFuncion(Funcion funcion) {
+        if(funcion.procedimiento){
+            if(funcion.returns == 0){
+                agregarResultado(funcion.id.getLinea(), 14, 1140, DESC_1140, true, funcion.id.getLexema(), 575);
+            }
+        }else{
+            agregarResultado(funcion.id.getLinea(), 13, 1130, DESC_1130, funcion.returns > 0, funcion.id.getLexema(), 573);
+        }
+    }
+
+    /**
+     * Regla 15 (1150): la llamada lleva tantos argumentos como parámetros declarados. Solo si pasa,
+     * regla 16 (1160): cada argumento debe ser del tipo del parámetro en su posición.
+     */
+    private void verificarLlamada(Contexto llamada) {
+        if(llamada.arreglo == null || !llamada.declarado){
+            return; // no declarado: ya está la fila 1100
+        }
+        Funcion funcion = buscarFuncion(llamada.arreglo.getLexema());
+        if(funcion == null){
+            return; // no es función ni procedimiento
+        }
+        List<String> argumentos = new ArrayList<>();
+        for(Expresion argumento: llamada.expresiones){
+            argumentos.add(argumento.texto.toString());
+        }
+        String lexema = llamada.arreglo.getLexema() + "(" + String.join(", ", argumentos) + ")";
+        boolean mismaCantidad = llamada.expresiones.size() == funcion.tiposParametros.size();
+        agregarResultado(llamada.arreglo.getLinea(), 15, 1150, DESC_1150, mismaCantidad, lexema, 576);
+        if(!mismaCantidad){
+            return;
+        }
+        for(int i = 0; i < llamada.expresiones.size(); i++){
+            Expresion argumento = llamada.expresiones.get(i);
+            int tipo = argumento.resultado == null ? Compatibilidad.VARIANT : Compatibilidad.tipoDeToken(argumento.resultado.getNumeroToken());
+            boolean aceptado = Compatibilidad.cabe(funcion.tiposParametros.get(i), tipo);
+            agregarResultado(argumento.linea, 16, 1160, DESC_1160, aceptado, argumento.texto.toString(), 577);
         }
     }
 
