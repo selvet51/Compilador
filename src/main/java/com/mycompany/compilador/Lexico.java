@@ -33,6 +33,9 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 public class Lexico {
 	
+	/** Nombre del Excel que se genera en la carpeta del proyecto (y nombre por defecto al guardarlo en otra parte). */
+	public static final String NOMBRE_EXCEL = "Carlos Tamayo - Semántica 2 Revisión.xlsx";
+	
 	static private int numFilas = 104;
     static private int numColumnas = 54;
     static private String[][] matriz = new String[numFilas][numColumnas];
@@ -538,7 +541,7 @@ public class Lexico {
         	}
         
         try {
-        	FileOutputStream fileOut = new FileOutputStream("Carlos Tamayo - Semántica 2 Revisión.xlsx");
+        	FileOutputStream fileOut = new FileOutputStream(NOMBRE_EXCEL);
             wb.write(fileOut);
             fileOut.close();
             wb.close();

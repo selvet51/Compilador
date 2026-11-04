@@ -2,38 +2,49 @@ package com.mycompany.compilador;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Dimension;
-import java.awt.GridLayout;
+import java.awt.Component;
+import java.awt.FileDialog;
+import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
+import javax.swing.BorderFactory;
 import javax.swing.JButton;
-import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
+import javax.swing.JTable;
 import javax.swing.JTextArea;
+import javax.swing.border.TitledBorder;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
 
 public class FrameLexico extends JFrame implements ActionListener {
 
+    private static final Font FUENTE_TABLA = new Font(Font.SANS_SERIF, Font.PLAIN, 13);
+    private static final Color FILA_PAR = Color.WHITE;
+    private static final Color FILA_IMPAR = new Color(242, 245, 250);
+
     JPanel panelPrincipal;
 
-    JButton botonArchivo, botonCompilar;
+    JButton botonArchivo, botonCompilar, botonGuardar;
 
     JTextArea textArea;
 
-    JTextArea areaTokens;
-    JTextArea areaErrores;
-
-    JLabel labelTokens;
-    JLabel labelErrores;
+    DefaultTableModel modeloTokens, modeloErrores;
+    JTable tablaTokens, tablaErrores;
+    TitledBorder bordeTokens, bordeErrores;
 
     JScrollPane scrollCodigo;
 
@@ -46,7 +57,7 @@ public class FrameLexico extends JFrame implements ActionListener {
         this.setTitle(title);
         this.setDefaultCloseOperation(EXIT_ON_CLOSE);
         this.setResizable(true);
-        this.setSize(1200, 700);
+        this.setSize(1300, 750);
 
         analizador = new Lexico();
 
@@ -89,44 +100,42 @@ public class FrameLexico extends JFrame implements ActionListener {
 
         botonCompilar = new JButton("Compilar");
         botonCompilar.addActionListener(this);
-        
+
+        botonGuardar = new JButton("Guardar Excel");
+        botonGuardar.addActionListener(this);
+        botonGuardar.setEnabled(false); // hasta que se compile por primera vez
 
         panelBotones.add(botonArchivo);
         panelBotones.add(botonCompilar);
+        panelBotones.add(botonGuardar);
 
         panelCodigo.add(panelBotones, BorderLayout.SOUTH);
 
-        JPanel panelResultados = new JPanel();
-        panelResultados.setLayout(new GridLayout(4, 1));
-
         // TOKENS
-        JPanel panelTokens = new JPanel(new BorderLayout());
-
-        labelTokens = new JLabel("Tokens: 0");
-
-        areaTokens = new JTextArea();
-        areaTokens.setEditable(false);
-
-        JScrollPane scrollTokens = new JScrollPane(areaTokens);
-
-        panelTokens.add(labelTokens, BorderLayout.NORTH);
-        panelTokens.add(scrollTokens, BorderLayout.CENTER);
+        modeloTokens = crearModelo("Token", "Lexema", "Línea");
+        tablaTokens = crearTabla(modeloTokens);
+        tablaTokens.getColumnModel().getColumn(0).setPreferredWidth(70);
+        tablaTokens.getColumnModel().getColumn(1).setPreferredWidth(220);
+        tablaTokens.getColumnModel().getColumn(2).setPreferredWidth(60);
+        bordeTokens = BorderFactory.createTitledBorder("Tokens (0)");
+        JScrollPane scrollTokens = new JScrollPane(tablaTokens);
+        scrollTokens.setBorder(bordeTokens);
 
         // ERRORES
-        JPanel panelErrores = new JPanel(new BorderLayout());
+        modeloErrores = crearModelo("Error", "Descripción", "Lexema", "Línea", "Tipo");
+        tablaErrores = crearTabla(modeloErrores);
+        tablaErrores.setDefaultRenderer(Object.class, new RendererErrores());
+        tablaErrores.getColumnModel().getColumn(0).setPreferredWidth(55);
+        tablaErrores.getColumnModel().getColumn(1).setPreferredWidth(330);
+        tablaErrores.getColumnModel().getColumn(2).setPreferredWidth(110);
+        tablaErrores.getColumnModel().getColumn(3).setPreferredWidth(50);
+        tablaErrores.getColumnModel().getColumn(4).setPreferredWidth(85);
+        bordeErrores = BorderFactory.createTitledBorder("Errores (0)");
+        JScrollPane scrollErrores = new JScrollPane(tablaErrores);
+        scrollErrores.setBorder(bordeErrores);
 
-        labelErrores = new JLabel("Errores: 0");
-
-        areaErrores = new JTextArea();
-        areaErrores.setEditable(false);
-
-        JScrollPane scrollErrores = new JScrollPane(areaErrores);
-
-        panelErrores.add(labelErrores, BorderLayout.NORTH);
-        panelErrores.add(scrollErrores, BorderLayout.CENTER);
-
-        panelResultados.add(panelTokens);
-        panelResultados.add(panelErrores);
+        JSplitPane panelResultados = new JSplitPane(JSplitPane.VERTICAL_SPLIT, scrollTokens, scrollErrores);
+        panelResultados.setResizeWeight(0.5);
 
         JSplitPane splitPane = new JSplitPane(
                 JSplitPane.HORIZONTAL_SPLIT,
@@ -134,89 +143,184 @@ public class FrameLexico extends JFrame implements ActionListener {
                 panelResultados
         );
 
-        splitPane.setDividerLocation(700);
+        splitPane.setDividerLocation(600);
 
         panelPrincipal.add(splitPane, BorderLayout.CENTER);
 
         this.add(panelPrincipal);
 
         this.setVisible(true);
+        panelResultados.setDividerLocation(0.5);
+    }
+
+    /** Modelo de tabla con esas columnas, sin celdas editables. */
+    private static DefaultTableModel crearModelo(String... columnas) {
+        return new DefaultTableModel(columnas, 0) {
+            @Override
+            public boolean isCellEditable(int fila, int columna) {
+                return false;
+            }
+        };
+    }
+
+    /** Tabla de resultados: fuente legible, encabezado en negrita y filas alternadas. */
+    private static JTable crearTabla(DefaultTableModel modelo) {
+        JTable tabla = new JTable(modelo);
+        tabla.setFont(FUENTE_TABLA);
+        tabla.setRowHeight(22);
+        tabla.getTableHeader().setFont(FUENTE_TABLA.deriveFont(Font.BOLD));
+        tabla.getTableHeader().setReorderingAllowed(false);
+        tabla.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
+        tabla.setFillsViewportHeight(true);
+        tabla.setDefaultRenderer(Object.class, new RendererFilas());
+        return tabla;
+    }
+
+    /** Pinta las filas alternadas y muestra el texto completo de la celda como tooltip. */
+    private static class RendererFilas extends DefaultTableCellRenderer {
+        @Override
+        public Component getTableCellRendererComponent(JTable tabla, Object valor, boolean seleccionada,
+                boolean foco, int fila, int columna) {
+            super.getTableCellRendererComponent(tabla, valor, seleccionada, foco, fila, columna);
+            if (!seleccionada) {
+                setBackground(colorFila(tabla, fila));
+            }
+            setToolTipText(valor == null ? null : valor.toString());
+            setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+            return this;
+        }
+
+        protected Color colorFila(JTable tabla, int fila) {
+            return fila % 2 == 0 ? FILA_PAR : FILA_IMPAR;
+        }
+    }
+
+    /** En la tabla de errores cada fila lleva un color suave según su tipo. */
+    private static class RendererErrores extends RendererFilas {
+        @Override
+        protected Color colorFila(JTable tabla, int fila) {
+            Object tipo = tabla.getModel().getValueAt(tabla.convertRowIndexToModel(fila), 4);
+            Color base;
+            switch (tipo == null ? "" : tipo.toString()) {
+                case "Léxico": base = new Color(255, 236, 236); break;
+                case "Sintáxis": base = new Color(255, 244, 226); break;
+                case "Ámbitos": base = new Color(232, 242, 255); break;
+                case "Semántica": base = new Color(240, 234, 255); break;
+                default: return super.colorFila(tabla, fila);
+            }
+            // Las filas impares un poco más oscuras para que se distingan entre sí.
+            return fila % 2 == 0 ? base
+                    : new Color(Math.max(base.getRed() - 12, 0), Math.max(base.getGreen() - 12, 0), Math.max(base.getBlue() - 12, 0));
+        }
+    }
+
+    /** Abre la ventana nativa del sistema (en Windows, la del Explorador) para cargar un archivo de código. */
+    private void escogerArchivo() {
+        FileDialog dialogo = new FileDialog(this, "Escoger archivo", FileDialog.LOAD);
+        dialogo.setVisible(true);
+        if (dialogo.getFile() == null) {
+            return; // cancelado
+        }
+
+        file = new File(dialogo.getDirectory(), dialogo.getFile());
+        textArea.setText("");
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                textArea.append(line + "\n");
+            }
+        } catch (IOException ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this, "No se pudo leer el archivo:\n" + ex.getMessage(),
+                    "Escoger archivo", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /**
+     * Abre la ventana nativa de "Guardar como" y copia ahí el Excel que se generó en la carpeta del
+     * proyecto. Si se cancela, el Excel sigue solo en la carpeta del proyecto.
+     */
+    private void guardarExcel() {
+        File generado = new File(Lexico.NOMBRE_EXCEL);
+        if (!generado.exists()) {
+            JOptionPane.showMessageDialog(this, "Primero compila el código para generar el Excel.",
+                    "Guardar Excel", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        FileDialog dialogo = new FileDialog(this, "Guardar Excel", FileDialog.SAVE);
+        dialogo.setFile(Lexico.NOMBRE_EXCEL);
+        dialogo.setVisible(true);
+        if (dialogo.getFile() == null) {
+            return; // cancelado
+        }
+
+        String nombre = dialogo.getFile();
+        if (!nombre.toLowerCase().endsWith(".xlsx")) {
+            nombre += ".xlsx";
+        }
+        guardarExcelEn(new File(dialogo.getDirectory(), nombre));
+    }
+
+    /** Copia el Excel generado a destino y avisa el resultado. */
+    void guardarExcelEn(File destino) {
+        try {
+            File generado = new File(Lexico.NOMBRE_EXCEL).getAbsoluteFile();
+            if (!generado.equals(destino.getAbsoluteFile())) {
+                try (InputStream entrada = new FileInputStream(generado);
+                        OutputStream salida = new FileOutputStream(destino)) {
+                    entrada.transferTo(salida);
+                }
+            }
+            JOptionPane.showMessageDialog(this, "Excel guardado en:\n" + destino.getAbsolutePath(),
+                    "Guardar Excel", JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this, "No se pudo guardar el Excel:\n" + ex.getMessage(),
+                    "Guardar Excel", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /** Compila el código del editor y llena las tablas de tokens y errores. */
+    private void compilar() {
+        try {
+            analizador.consultar(textArea.getText());
+        } catch (IOException ex) {
+            System.getLogger(FrameLexico.class.getName()).log(System.Logger.Level.ERROR, (String) null, ex);
+        }
+
+        modeloTokens.setRowCount(0);
+        for (Token token : analizador.getListaTokens()) {
+            modeloTokens.addRow(new Object[]{token.getNumeroToken(), token.getLexema(), token.getLinea()});
+        }
+
+        modeloErrores.setRowCount(0);
+        for (Error error : analizador.getListaErrores()) {
+            modeloErrores.addRow(new Object[]{error.getNumeroError(), error.getDescripcion(), error.getLexema(),
+                error.getLinea(), error.getTipoError()});
+        }
+
+        bordeTokens.setTitle("Tokens (" + analizador.getListaTokens().size() + ")");
+        bordeErrores.setTitle("Errores (" + analizador.getListaErrores().size() + ")");
+        repaint();
+
+        botonGuardar.setEnabled(true);
+        guardarExcel();
     }
 
     @Override
     public void actionPerformed(ActionEvent e) {
 
         if (e.getSource() == botonArchivo) {
-
-            JFileChooser fileChooser = new JFileChooser();
-
-            int respuesta = fileChooser.showOpenDialog(null);
-
-            if (respuesta == JFileChooser.APPROVE_OPTION) {
-
-                textArea.setText("");
-
-                file = new File(fileChooser.getSelectedFile().getAbsolutePath());
-
-                try {
-
-                    String line = "";
-
-                    BufferedReader br = new BufferedReader(new FileReader(file));
-
-                    while ((line = br.readLine()) != null) {
-                        textArea.append(line + "\n");
-                    }
-
-                    br.close();
-
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-            }
+            escogerArchivo();
         }
 
         if (e.getSource() == botonCompilar) {
-
-            try {
-                analizador.consultar(textArea.getText());
-            } catch (IOException ex) {
-                System.getLogger(FrameLexico.class.getName()).log(System.Logger.Level.ERROR, (String) null, ex);
-            }
-
-            areaTokens.setText("");
-
-            for (Token token : analizador.getListaTokens()) {
-
-                areaTokens.append(
-                        "Token: " + token.getNumeroToken()
-                        + " | Lexema: " + token.getLexema()
-                        + " | Línea: " + token.getLinea()
-                        + "\n"
-                );
-            }
-            areaErrores.setText("");
-
-            for (Error error : analizador.getListaErrores()) {
-
-                areaErrores.append(
-                        "Error: " + error.getNumeroError()
-                        + " | Desc: " + error.getDescripcion()
-                        + " | Lexema: " + error.getLexema()
-                        + " | Línea: " + error.getLinea()
-                        + " | Tipo: " + error.getTipoError()
-                        + "\n"
-                );
-            }
-            labelTokens.setText(
-                    "Tokens: " + analizador.getListaTokens().size()
-            );
-
-            labelErrores.setText(
-                    "Errores: " + analizador.getListaErrores().size()
-            );
+            compilar();
         }
-        
-        
+
+        if (e.getSource() == botonGuardar) {
+            guardarExcel();
+        }
     }
 }

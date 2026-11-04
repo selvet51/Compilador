@@ -1,7 +1,7 @@
 package com.mycompany.compilador;
 
 /**
- * Una verificación de regla semántica: es una fila del archivo reglas.txt.
+ * Una verificación de regla semántica: es una fila de la hoja "Semantica 2-Base".
  */
 public class ResultadoRegla {
 	private int linea;
@@ -58,7 +58,7 @@ public class ResultadoRegla {
 		return topePila;
 	}
 
-	/** "ACEPT" o "ERROR", tal como va en reglas.txt. */
+	/** "ACEPT" o "ERROR", tal como va en la hoja "Semantica 2-Base". */
 	public String getResultado() {
 		return aceptada ? "ACEPT" : "ERROR";
 	}

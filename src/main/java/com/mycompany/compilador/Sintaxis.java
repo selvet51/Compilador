@@ -6,12 +6,8 @@ package com.mycompany.compilador;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.FileOutputStream;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -83,7 +79,7 @@ public class Sintaxis {
     private Map<Integer, int[]> temporalesPorLinea = new TreeMap<>();
     private Map<Integer, List<String>> asignacionesPorLinea = new TreeMap<>();
 
-    // Reglas semánticas 1 a 5 (se escriben en reglas.txt al terminar el análisis)
+    // Reglas semánticas (se escriben en las hojas "Semantica 2" al terminar el análisis)
     private static final String DESC_REGLA1 = "La expresión debe ser lógica";
     private static final String DESC_REGLA2 = "El identificador debe ser del mismo tipo que la expresión";
     private static final String DESC_REGLA3 = "La cantidad de dimensiones utilizadas en un arreglo debe ser igual a la declarada";
@@ -1483,7 +1479,6 @@ public class Sintaxis {
 
         
         llenarSemantica();
-        escribirReglas();
         llenarSemantica2();
 
         Row row2 = sheetSintaxis.createRow(1);
@@ -1868,7 +1863,7 @@ public class Sintaxis {
     }
 
     /**
-     * Registra una verificación de regla para reglas.txt. Si no se aceptó y se da un número de
+     * Registra una verificación de regla para las hojas "Semantica 2". Si no se aceptó y se da un número de
      * error (mayor a 0), también lo agrega a la lista de errores como semántico. El tope de pila es lo que
      * se evaluó (id, tipo del temporal, nº de dimensiones o parámetros...) para la hoja "Semantica 2-Base".
      */
@@ -2098,7 +2093,7 @@ public class Sintaxis {
     }
 
     /**
-     * Llena las hojas "Semantica 2-Base" (una fila por verificación, en el orden de reglas.txt) y
+     * Llena las hojas "Semantica 2-Base" (una fila por verificación, ordenadas por línea) y
      * "Semantica 2-Total" (cuántas veces aparece cada clave, aceptadas y errores).
      */
     private void llenarSemantica2() {
@@ -2129,43 +2124,6 @@ public class Sintaxis {
             row.createCell(1).setCellValue(cuenta[0]);
             row.createCell(2).setCellValue(cuenta[1]);
             row.createCell(3).setCellValue(cuenta[2]);
-        }
-    }
-
-    /** Escribe reglas.txt: una línea por verificación, con las columnas alineadas y ordenada por línea. */
-    private void escribirReglas() {
-        List<ResultadoRegla> ordenados = new ArrayList<>(resultadosReglas);
-        ordenados.sort(Comparator.comparingInt(ResultadoRegla::getLinea)); // el orden es estable
-
-        List<String[]> filas = new ArrayList<>();
-        filas.add(new String[]{"Línea", "Regla", "Clave", "Descripción", "Resultado", "Lexema", "Ámbito"});
-        for(ResultadoRegla resultado: ordenados){
-            filas.add(new String[]{String.valueOf(resultado.getLinea()), String.valueOf(resultado.getRegla()),
-                String.valueOf(resultado.getClave()), resultado.getDescripcion(), resultado.getResultado(),
-                resultado.getLexema().replaceAll("[\\t\\r\\n]", " "), String.valueOf(resultado.getAmbito())});
-        }
-
-        int[] anchos = new int[7];
-        for(String[] fila: filas){
-            for(int i = 0; i < 7; i++){
-                anchos[i] = Math.max(anchos[i], fila[i].length());
-            }
-        }
-
-        try(BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("reglas.txt"), StandardCharsets.UTF_8))){
-            for(String[] fila: filas){
-                StringBuilder linea = new StringBuilder();
-                for(int i = 0; i < 7; i++){
-                    if(i > 0){
-                        linea.append(" | ");
-                    }
-                    linea.append(i == 6 ? fila[i] : String.format("%-" + anchos[i] + "s", fila[i]));
-                }
-                writer.write(linea.toString());
-                writer.newLine();
-            }
-        }catch(IOException e){
-            e.printStackTrace();
         }
     }
 
