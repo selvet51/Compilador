@@ -1922,8 +1922,8 @@ public class Sintaxis {
     }
 
     /**
-     * Reglas 3, 4 y 5 (claves 1030, 1040 y 1050) para un uso de arreglo. Primero la 3; si falla no se
-     * revisan las otras. Luego, por cada índice, la 4 y solo si pasa, la 5.
+     * Reglas 3, 4 y 5 (claves 1030, 1040 y 1050) para un uso de arreglo, por cada índice: la 3, si pasa
+     * la 4 y si pasa la 5.
      */
     private void verificarArreglo(Contexto uso) {
         Token id = uso.arreglo;
@@ -1934,14 +1934,13 @@ public class Sintaxis {
         int declaradas = tamaños == null ? 0 : tamaños.length;
 
         boolean mismasDimensiones = declaradas == uso.expresiones.size();
-        agregarResultado(id.getLinea(), 3, 1030, DESC_REGLA3, mismasDimensiones, id.getLexema(), 557, declaradas > 0 ? String.valueOf(declaradas) : "-");
-        if(!mismasDimensiones){
-            return;
-        }
+        String topeDimensiones = declaradas > 0 ? String.valueOf(declaradas) : "-";
 
-        for(int i = 0; i < declaradas; i++){
+        // Por cada índice se revisa la cadena 3 -> 4 -> 5.
+        for(int i = 0; i < uso.expresiones.size(); i++){
             Expresion indice = uso.expresiones.get(i);
-            if(indice.resultado == null){
+            agregarResultado(id.getLinea(), 3, 1030, DESC_REGLA3, mismasDimensiones, id.getLexema(), 557, topeDimensiones);
+            if(!mismasDimensiones || indice.resultado == null){
                 continue;
             }
             int tipo = Compatibilidad.tipoDeToken(indice.resultado.getNumeroToken());
@@ -2025,8 +2024,9 @@ public class Sintaxis {
     }
 
     /**
-     * Regla 15 (1150): la llamada lleva tantos argumentos como parámetros declarados. Solo si pasa,
-     * regla 16 (1160): cada argumento debe ser del tipo del parámetro en su posición.
+     * Por cada argumento, regla 15 (1150): debe tener un parámetro declarado en su posición; si sobra da
+     * ERROR y no se revisa la 16. Si pasa, regla 16 (1160): debe ser del tipo de ese parámetro. Si faltan
+     * argumentos se agrega una 1150 ERROR al final.
      */
     private void verificarLlamada(Contexto llamada) {
         if(llamada.arreglo == null || !llamada.declarado){
@@ -2036,21 +2036,21 @@ public class Sintaxis {
         if(funcion == null){
             return; // no es función ni procedimiento
         }
-        List<String> argumentos = new ArrayList<>();
-        for(Expresion argumento: llamada.expresiones){
-            argumentos.add(argumento.texto.toString());
-        }
-        String lexema = llamada.arreglo.getLexema() + "(" + String.join(", ", argumentos) + ")";
-        boolean mismaCantidad = llamada.expresiones.size() == funcion.tiposParametros.size();
-        agregarResultado(llamada.arreglo.getLinea(), 15, 1150, DESC_1150, mismaCantidad, lexema, 576, mismaCantidad ? String.valueOf(funcion.tiposParametros.size()) : "-");
-        if(!mismaCantidad){
-            return;
-        }
+        String nombre = llamada.arreglo.getLexema();
+        int parametros = funcion.tiposParametros.size();
         for(int i = 0; i < llamada.expresiones.size(); i++){
             Expresion argumento = llamada.expresiones.get(i);
+            boolean declarado = i < parametros;
+            agregarResultado(argumento.linea, 15, 1150, DESC_1150, declarado, nombre, 576, String.valueOf(parametros));
+            if(!declarado){
+                continue; // sobra este argumento
+            }
             int tipo = argumento.resultado == null ? Compatibilidad.VARIANT : Compatibilidad.tipoDeToken(argumento.resultado.getNumeroToken());
             boolean aceptado = Compatibilidad.cabe(funcion.tiposParametros.get(i), tipo);
             agregarResultado(argumento.linea, 16, 1160, DESC_1160, aceptado, argumento.texto.toString(), 577, nombreTipoCorto(funcion.tiposParametros.get(i)));
+        }
+        if(llamada.expresiones.size() < parametros){
+            agregarResultado(llamada.arreglo.getLinea(), 15, 1150, DESC_1150, false, nombre, 576, "-"); // faltan argumentos
         }
     }
 
