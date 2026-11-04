@@ -11,8 +11,9 @@ public class ResultadoRegla {
 	private boolean aceptada;
 	private String lexema;
 	private int ambito;
+	private String topePila;
 
-	public ResultadoRegla(int linea, int regla, int clave, String descripcion, boolean aceptada, String lexema, int ambito) {
+	public ResultadoRegla(int linea, int regla, int clave, String descripcion, boolean aceptada, String lexema, int ambito, String topePila) {
 		super();
 		this.linea = linea;
 		this.regla = regla;
@@ -21,6 +22,7 @@ public class ResultadoRegla {
 		this.aceptada = aceptada;
 		this.lexema = lexema;
 		this.ambito = ambito;
+		this.topePila = topePila;
 	}
 
 	public int getLinea() {
@@ -49,6 +51,11 @@ public class ResultadoRegla {
 
 	public int getAmbito() {
 		return ambito;
+	}
+
+	/** Lo que había en el tope de la pila al verificar (id, tipo, nº de parámetros...). */
+	public String getTopePila() {
+		return topePila;
 	}
 
 	/** "ACEPT" o "ERROR", tal como va en reglas.txt. */

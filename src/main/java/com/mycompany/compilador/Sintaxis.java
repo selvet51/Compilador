@@ -79,6 +79,7 @@ public class Sintaxis {
     private Sheet sheetAmbito;
     private Sheet sheetSimbolos;
     private Sheet sheetSemantica;
+    private Sheet sheetSemantica2Base, sheetSemantica2Total;
     private Map<Integer, int[]> temporalesPorLinea = new TreeMap<>();
     private Map<Integer, List<String>> asignacionesPorLinea = new TreeMap<>();
 
@@ -736,6 +737,22 @@ public class Sintaxis {
             rowSemantica.createCell(c).setCellValue(encabezadoSemantica[c]);
         }
         sheetSemantica.setColumnWidth(10, 40 * 256);
+        
+        //SHEETS DE SEMÁNTICA 2
+        sheetSemantica2Base = wb.createSheet("Semantica 2-Base");
+        String[] encabezadoBase = {"Regla", "Tope Pila", "Valor Real", "Linea", "Edo", "Ambito"};
+        Row rowBase = sheetSemantica2Base.createRow(0);
+        for(int c = 0; c < encabezadoBase.length; c++){
+            rowBase.createCell(c).setCellValue(encabezadoBase[c]);
+        }
+        sheetSemantica2Base.setColumnWidth(2, 30 * 256);
+        
+        sheetSemantica2Total = wb.createSheet("Semantica 2-Total");
+        String[] encabezadoTotal = {"Reglas", "Aparecen", "Aceptada", "Errores"};
+        Row rowTotal = sheetSemantica2Total.createRow(0);
+        for(int c = 0; c < encabezadoTotal.length; c++){
+            rowTotal.createCell(c).setCellValue(encabezadoTotal[c]);
+        }
         
     }
     
@@ -1457,6 +1474,7 @@ public class Sintaxis {
         
         llenarSemantica();
         escribirReglas();
+        llenarSemantica2();
 
         Row row2 = sheetSintaxis.createRow(1);
         row2.createCell(0).setCellValue(listaErrores.size());
@@ -1506,17 +1524,17 @@ public class Sintaxis {
                 erroresAmbitosCont++;
                 erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
                 listaErrores.add(new Error(541, token.getLinea(), token.getLexema(), TipoError.AMBITO));
-                agregarResultado(token.getLinea(), 10, 1100, DESC_1100, false, token.getLexema(), 0);
+                agregarResultado(token.getLinea(), 10, 1100, DESC_1100, false, token.getLexema(), 0, "id");
                 return false;
             }
         }else{
             erroresAmbitosCont++;
             erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
             listaErrores.add(new Error(540, token.getLinea(), token.getLexema(), TipoError.AMBITO));
-            agregarResultado(token.getLinea(), 10, 1100, DESC_1100, false, token.getLexema(), 0);
+            agregarResultado(token.getLinea(), 10, 1100, DESC_1100, false, token.getLexema(), 0, "id");
             return false;
         }
-        agregarResultado(token.getLinea(), 10, 1100, DESC_1100, true, token.getLexema(), 0);
+        agregarResultado(token.getLinea(), 10, 1100, DESC_1100, true, token.getLexema(), 0, "id");
         return true;
     }
 
@@ -1625,18 +1643,18 @@ public class Sintaxis {
         }else if(tokenIgual.getNumeroToken() == -34){
             clave = 1021;
         }
-        agregarResultado(tokenAsignado.getLinea(), 2, clave, DESC_REGLA2, aceptada, tokenAsignado.getLexema(), 0);
+        agregarResultado(tokenAsignado.getLinea(), 2, clave, DESC_REGLA2, aceptada, tokenAsignado.getLexema(), 0, "id");
 
         // Regla 9: solo variable, parámetro o arreglo pueden recibir un valor. Un id sin declarar (Variant) se acepta.
         String clase = claseDeSimbolo(tokenAsignado.getLexema());
         boolean recibe = clase == null || clase.equals("Variable") || clase.equals("Parametro") || clase.equals("Arreglo");
-        agregarResultado(tokenAsignado.getLinea(), 9, 1090, DESC_1090, recibe, tokenAsignado.getLexema(), 570);
+        agregarResultado(tokenAsignado.getLinea(), 9, 1090, DESC_1090, recibe, tokenAsignado.getLexema(), 570, "id");
 
         // Clave 1080: la inicialización de un for debe ser entera (id y expresión).
         if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.FOR
                 && pilaContextos.peek().fase == Contexto.FASE_INICIALIZACION){
             boolean entera = esEnteroOVariant(tipoVariable) && esEnteroOVariant(tipoResultado);
-            agregarResultado(tokenAsignado.getLinea(), 8, 1080, DESC_1080, entera, tokenAsignado.getLexema(), 565);
+            agregarResultado(tokenAsignado.getLinea(), 8, 1080, DESC_1080, entera, tokenAsignado.getLexema(), 565, "id");
         }
     }
 
@@ -1669,7 +1687,7 @@ public class Sintaxis {
         }
         boolean aceptada = esEnteroOVariant(tipoDeId(ultimoIdVerificado));
         agregarResultado(ultimoIdVerificado.getLinea(), 7, 1070, DESC_1070_INC, aceptada,
-                unarioPendiente.getLexema() + ultimoIdVerificado.getLexema(), 562);
+                unarioPendiente.getLexema() + ultimoIdVerificado.getLexema(), 562, "id");
     }
 
     /**
@@ -1693,7 +1711,7 @@ public class Sintaxis {
             aceptada = tipo <= 3 || tipo == Compatibilidad.VARIANT;
         }
         agregarResultado(expresion.linea, 7, 1070, negacion ? DESC_1070_NOT : DESC_1070_NEG, aceptada,
-                unario.operador + "(" + expresion.texto + ")", negacion ? 563 : 564);
+                unario.operador + "(" + expresion.texto + ")", negacion ? 563 : 564, Compatibilidad.nombreTipo(tipo));
         if(insertandoPrefijo){
             pilaOperandos.push(negacion
                     ? new Token(Compatibilidad.tokenTemporal(7), "!" + expresion.resultado.getLexema(), expresion.linea)
@@ -1714,7 +1732,7 @@ public class Sintaxis {
         Expresion exp = cambio.expresiones.get(0);
         int tipoExp = Compatibilidad.tipoDeToken(exp.resultado.getNumeroToken());
         boolean expValida = esCadenaODecimal(tipoExp) || tipoExp == Compatibilidad.VARIANT;
-        agregarResultado(exp.linea, 6, 1060, DESC_1060, expValida, exp.texto.toString(), 560);
+        agregarResultado(exp.linea, 6, 1060, DESC_1060, expValida, exp.texto.toString(), 560, Compatibilidad.nombreTipo(tipoExp));
     }
 
     /**
@@ -1745,7 +1763,7 @@ public class Sintaxis {
             int tipoCaso = Compatibilidad.tipoDeToken(caso.resultado.getNumeroToken());
             boolean aceptado = tipoCaso == Compatibilidad.VARIANT
                     || (esCadenaODecimal(tipoCaso) && (tipoEfectivo < 0 || tipoCaso == tipoEfectivo));
-            agregarResultado(caso.linea, 6, 1061, DESC_1061, aceptado, caso.texto.toString(), 561);
+            agregarResultado(caso.linea, 6, 1061, DESC_1061, aceptado, caso.texto.toString(), 561, Compatibilidad.nombreTipo(tipoCaso));
         }
     }
 
@@ -1757,7 +1775,7 @@ public class Sintaxis {
         }
         int tipo = Compatibilidad.tipoDeToken(comparacion.resultado.getNumeroToken());
         boolean aceptada = tipo == 7 || tipo == Compatibilidad.VARIANT;
-        agregarResultado(comparacion.linea, 8, 1081, DESC_1081, aceptada, comparacion.texto.toString(), 566);
+        agregarResultado(comparacion.linea, 8, 1081, DESC_1081, aceptada, comparacion.texto.toString(), 566, Compatibilidad.nombreTipo(tipo));
     }
 
     /** Clave 1082: el incremento es ++x, --x o una asignación sobre un id entero (#D). Otra cosa es ERROR. */
@@ -1779,7 +1797,7 @@ public class Sintaxis {
             }
         }
         boolean aceptada = id != null && esEnteroOVariant(tipoDeId(id));
-        agregarResultado(incremento.linea, 8, 1082, DESC_1082, aceptada, incremento.texto.toString(), 567);
+        agregarResultado(incremento.linea, 8, 1082, DESC_1082, aceptada, incremento.texto.toString(), 567, id != null ? "id" : "-");
     }
 
     /**
@@ -1805,25 +1823,26 @@ public class Sintaxis {
 
         if(esArreglo){
             boolean aceptada = variant1 || variant2 || tipo1 == tipo2;
-            agregarResultado(valor2.linea, 8, 1084, DESC_1084, aceptada, lexema, 569);
+            agregarResultado(valor2.linea, 8, 1084, DESC_1084, aceptada, lexema, 569, Compatibilidad.nombreTipo(tipo2));
         }else if(variant2){
             if(variant1){
-                agregarResultado(valor2.linea, 8, 1083, DESC_1083, true, lexema, 568);
+                agregarResultado(valor2.linea, 8, 1083, DESC_1083, true, lexema, 568, Compatibilidad.nombreTipo(tipo2));
             }
-            agregarResultado(valor2.linea, 8, 1084, DESC_1084, true, lexema, 569);
+            agregarResultado(valor2.linea, 8, 1084, DESC_1084, true, lexema, 569, Compatibilidad.nombreTipo(tipo2));
         }else if(tipo2 == 6){
-            agregarResultado(valor2.linea, 8, 1083, DESC_1083, variant1 || tipo1 == 1, lexema, 568);
+            agregarResultado(valor2.linea, 8, 1083, DESC_1083, variant1 || tipo1 == 1, lexema, 568, Compatibilidad.nombreTipo(tipo2));
         }else{
-            agregarResultado(valor2.linea, 8, 1084, DESC_1084, false, lexema, 569); // no es cadena ni arreglo
+            agregarResultado(valor2.linea, 8, 1084, DESC_1084, false, lexema, 569, Compatibilidad.nombreTipo(tipo2)); // no es cadena ni arreglo
         }
     }
 
     /**
      * Registra una verificación de regla para reglas.txt. Si no se aceptó y se da un número de
-     * error (mayor a 0), también lo agrega a la lista de errores como semántico.
+     * error (mayor a 0), también lo agrega a la lista de errores como semántico. El tope de pila es lo que
+     * se evaluó (id, tipo del temporal, nº de dimensiones o parámetros...) para la hoja "Semantica 2-Base".
      */
-    private void agregarResultado(int linea, int regla, int clave, String descripcion, boolean aceptada, String lexema, int numeroError) {
-        resultadosReglas.add(new ResultadoRegla(linea, regla, clave, descripcion, aceptada, lexema, pilaAmbitos.peek()));
+    private void agregarResultado(int linea, int regla, int clave, String descripcion, boolean aceptada, String lexema, int numeroError, String topePila) {
+        resultadosReglas.add(new ResultadoRegla(linea, regla, clave, descripcion, aceptada, lexema, pilaAmbitos.peek(), topePila));
         if(!aceptada && numeroError > 0){
             listaErrores.add(new Error(numeroError, linea, lexema, TipoError.SEMANTICA));
         }
@@ -1888,7 +1907,7 @@ public class Sintaxis {
         int tipo = Compatibilidad.tipoDeToken(expresion.resultado.getNumeroToken());
         // Variant (id no declarado o error previo en la expresión) no se vuelve a reportar.
         boolean aceptada = tipo == 7 || tipo == Compatibilidad.VARIANT;
-        agregarResultado(expresion.linea, 1, condicion.clave, DESC_REGLA1, aceptada, expresion.texto.toString(), 556);
+        agregarResultado(expresion.linea, 1, condicion.clave, DESC_REGLA1, aceptada, expresion.texto.toString(), 556, Compatibilidad.nombreTipo(tipo));
     }
 
     /** Tamaños declarados del id visible desde el ámbito actual, o null si no se declaró en ningún ámbito abierto. */
@@ -1915,7 +1934,7 @@ public class Sintaxis {
         int declaradas = tamaños == null ? 0 : tamaños.length;
 
         boolean mismasDimensiones = declaradas == uso.expresiones.size();
-        agregarResultado(id.getLinea(), 3, 1030, DESC_REGLA3, mismasDimensiones, id.getLexema(), 557);
+        agregarResultado(id.getLinea(), 3, 1030, DESC_REGLA3, mismasDimensiones, id.getLexema(), 557, declaradas > 0 ? String.valueOf(declaradas) : "-");
         if(!mismasDimensiones){
             return;
         }
@@ -1928,7 +1947,7 @@ public class Sintaxis {
             int tipo = Compatibilidad.tipoDeToken(indice.resultado.getNumeroToken());
             // Entera: Bin, Dec, Oct o Hex. Variant no se vuelve a reportar.
             boolean entera = tipo <= 3 || tipo == Compatibilidad.VARIANT;
-            agregarResultado(indice.linea, 4, 1040, DESC_REGLA4, entera, indice.texto.toString(), 558);
+            agregarResultado(indice.linea, 4, 1040, DESC_REGLA4, entera, indice.texto.toString(), 558, Compatibilidad.nombreTipo(tipo));
             if(!entera){
                 continue;
             }
@@ -1936,7 +1955,7 @@ public class Sintaxis {
             // Solo se puede decidir el rango si el índice es una constante; con ids (x+A) se acepta.
             Long valor = EvaluadorConstante.evaluar(indice.tokens);
             boolean enRango = valor == null || (valor >= 0 && valor < tamaños[i]);
-            agregarResultado(indice.linea, 5, 1050, DESC_REGLA5, enRango, indice.texto.toString(), 559);
+            agregarResultado(indice.linea, 5, 1050, DESC_REGLA5, enRango, indice.texto.toString(), 559, Compatibilidad.nombreTipo(tipo));
         }
     }
 
@@ -1957,9 +1976,9 @@ public class Sintaxis {
 
         String clase = claseDeSimbolo(id.getLexema());
         if(procedimiento){
-            agregarResultado(id.getLinea(), 11, 1110, DESC_1110, "Procedimiento".equals(clase), id.getLexema(), 571);
+            agregarResultado(id.getLinea(), 11, 1110, DESC_1110, "Procedimiento".equals(clase), id.getLexema(), 571, "proc");
         }else{
-            agregarResultado(id.getLinea(), 12, 1120, DESC_1120, "Función".equals(clase), id.getLexema(), 572);
+            agregarResultado(id.getLinea(), 12, 1120, DESC_1120, "Función".equals(clase), id.getLexema(), 572, "func");
         }
     }
 
@@ -1984,11 +2003,11 @@ public class Sintaxis {
         Expresion expresion = retorno.expresiones.get(0);
         String lexema = "return " + expresion.texto;
         if(funcion.procedimiento){
-            agregarResultado(expresion.linea, 14, 1140, DESC_1140, false, lexema, 575);
+            agregarResultado(expresion.linea, 14, 1140, DESC_1140, false, lexema, 575, "return");
             return;
         }
         int tipo = expresion.resultado == null ? Compatibilidad.VARIANT : Compatibilidad.tipoDeToken(expresion.resultado.getNumeroToken());
-        agregarResultado(expresion.linea, 13, 1131, DESC_1131, Compatibilidad.cabe(funcion.tipo, tipo), lexema, 574);
+        agregarResultado(expresion.linea, 13, 1131, DESC_1131, Compatibilidad.cabe(funcion.tipo, tipo), lexema, 574, nombreTipoCorto(funcion.tipo));
     }
 
     /**
@@ -1998,10 +2017,10 @@ public class Sintaxis {
     private void terminarFuncion(Funcion funcion) {
         if(funcion.procedimiento){
             if(funcion.returns == 0){
-                agregarResultado(funcion.id.getLinea(), 14, 1140, DESC_1140, true, funcion.id.getLexema(), 575);
+                agregarResultado(funcion.id.getLinea(), 14, 1140, DESC_1140, true, funcion.id.getLexema(), 575, "}");
             }
         }else{
-            agregarResultado(funcion.id.getLinea(), 13, 1130, DESC_1130, funcion.returns > 0, funcion.id.getLexema(), 573);
+            agregarResultado(funcion.id.getLinea(), 13, 1130, DESC_1130, funcion.returns > 0, funcion.id.getLexema(), 573, "return");
         }
     }
 
@@ -2023,7 +2042,7 @@ public class Sintaxis {
         }
         String lexema = llamada.arreglo.getLexema() + "(" + String.join(", ", argumentos) + ")";
         boolean mismaCantidad = llamada.expresiones.size() == funcion.tiposParametros.size();
-        agregarResultado(llamada.arreglo.getLinea(), 15, 1150, DESC_1150, mismaCantidad, lexema, 576);
+        agregarResultado(llamada.arreglo.getLinea(), 15, 1150, DESC_1150, mismaCantidad, lexema, 576, mismaCantidad ? String.valueOf(funcion.tiposParametros.size()) : "-");
         if(!mismaCantidad){
             return;
         }
@@ -2031,7 +2050,51 @@ public class Sintaxis {
             Expresion argumento = llamada.expresiones.get(i);
             int tipo = argumento.resultado == null ? Compatibilidad.VARIANT : Compatibilidad.tipoDeToken(argumento.resultado.getNumeroToken());
             boolean aceptado = Compatibilidad.cabe(funcion.tiposParametros.get(i), tipo);
-            agregarResultado(argumento.linea, 16, 1160, DESC_1160, aceptado, argumento.texto.toString(), 577);
+            agregarResultado(argumento.linea, 16, 1160, DESC_1160, aceptado, argumento.texto.toString(), 577, nombreTipoCorto(funcion.tiposParametros.get(i)));
+        }
+    }
+
+    private static final int[] CLAVES = {1010, 1011, 1012, 1013, 1020, 1021, 1022, 1030, 1040, 1050, 1060, 1061, 1070,
+        1080, 1081, 1082, 1083, 1084, 1090, 1100, 1110, 1120, 1130, 1131, 1140, 1150, 1160};
+
+    /** Nombre del tipo sin la "T" de temporal: Bin, Dec, ... Variant. */
+    private static String nombreTipoCorto(int tipo) {
+        String[] nombres = {"Bin", "Dec", "Oct", "Hex", "Real", "Exp", "Cadena", "Boolean", "Variant"};
+        return nombres[tipo];
+    }
+
+    /**
+     * Llena las hojas "Semantica 2-Base" (una fila por verificación, en el orden de reglas.txt) y
+     * "Semantica 2-Total" (cuántas veces aparece cada clave, aceptadas y errores).
+     */
+    private void llenarSemantica2() {
+        List<ResultadoRegla> ordenados = new ArrayList<>(resultadosReglas);
+        ordenados.sort(Comparator.comparingInt(ResultadoRegla::getLinea));
+        Map<Integer, int[]> conteo = new HashMap<>();
+
+        int fila = 0;
+        for(ResultadoRegla resultado: ordenados){
+            Row row = sheetSemantica2Base.createRow(++fila);
+            row.createCell(0).setCellValue(resultado.getClave());
+            row.createCell(1).setCellValue(resultado.getTopePila());
+            row.createCell(2).setCellValue(resultado.getLexema());
+            row.createCell(3).setCellValue(resultado.getLinea());
+            row.createCell(4).setCellValue(resultado.getResultado());
+            row.createCell(5).setCellValue(resultado.getAmbito());
+
+            int[] cuenta = conteo.computeIfAbsent(resultado.getClave(), k -> new int[3]);
+            cuenta[0]++;
+            cuenta[resultado.isAceptada() ? 1 : 2]++;
+        }
+
+        fila = 0;
+        for(int clave: CLAVES){
+            int[] cuenta = conteo.getOrDefault(clave, new int[3]);
+            Row row = sheetSemantica2Total.createRow(++fila);
+            row.createCell(0).setCellValue(clave);
+            row.createCell(1).setCellValue(cuenta[0]);
+            row.createCell(2).setCellValue(cuenta[1]);
+            row.createCell(3).setCellValue(cuenta[2]);
         }
     }
 
