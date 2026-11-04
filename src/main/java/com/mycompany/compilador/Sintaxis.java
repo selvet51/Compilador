@@ -154,6 +154,8 @@ public class Sintaxis {
         String operador;
         int fase;
         Token valor1;
+        int linea;
+        boolean inicializacionVerificada;
         int clave;
         Token arreglo;
         boolean declarado;
@@ -1067,7 +1069,10 @@ public class Sintaxis {
                 
             }else if (topePila == 811){ //VERFICAR QUE EXISTE ID
                 //System.out.println("TOKEN ACTUAL = " + tokenActual.getLexema());
-                boolean declarado = verificarSimbolo(tokenActual);
+                // En la inicialización del for (y el valor 1 del for de cadenas o arreglos) no se escribe
+                // la 1100 y el id conserva el tipo de su prefijo.
+                boolean inicializacion = enInicializacionFor();
+                boolean declarado = verificarSimbolo(tokenActual, !inicializacion) || inicializacion;
                 ultimoIdVerificado = tokenActual;
                 ultimoIdDeclarado = declarado;
                 if(!declarado){
@@ -1221,6 +1226,7 @@ public class Sintaxis {
                 Contexto ciclo = new Contexto();
                 ciclo.tipo = Contexto.FOR;
                 ciclo.fase = Contexto.FASE_INICIALIZACION;
+                ciclo.linea = tokenActual.getLinea();
                 pilaContextos.push(ciclo);
                 pilaSintactica.pop();
             }else if(topePila == 840){ //FOR DE CADENAS O ARREGLOS: ABRIR EL VALOR 2
@@ -1240,6 +1246,10 @@ public class Sintaxis {
             }else if(topePila == 842){ //FOR: ABRIR LA COMPARACIÓN
                 if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.FOR){
                     Contexto ciclo = pilaContextos.peek();
+                    if(!ciclo.inicializacionVerificada){ //CLAVE 1080: la inicialización no fue una asignación
+                        agregarResultado(ciclo.linea, 8, 1080, DESC_1080, false,
+                                tokenAsignado != null ? tokenAsignado.getLexema() : "-", 565, "id");
+                    }
                     ciclo.fase = Contexto.FASE_COMPARACION;
                     abrirExpresion(ciclo, tokenActual.getLinea());
                 }
@@ -1510,6 +1520,11 @@ public class Sintaxis {
 
     /** Revisa que el id esté declarado en un ámbito visible; si no, agrega el error 540 o 541 y regresa false. */
     private boolean verificarSimbolo(Token token) {
+        return verificarSimbolo(token, true);
+    }
+
+    /** Igual, pero con registrar en false no escribe la fila 1100 (los errores 540/541 sí se agregan). */
+    private boolean verificarSimbolo(Token token, boolean registrar) {
         ambitos = conexionDB.verificarSimbolo(token.getLexema());
 
         if(!ambitos.isEmpty()){
@@ -1524,17 +1539,23 @@ public class Sintaxis {
                 erroresAmbitosCont++;
                 erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
                 listaErrores.add(new Error(541, token.getLinea(), token.getLexema(), TipoError.AMBITO));
-                agregarResultado(token.getLinea(), 10, 1100, DESC_1100, false, token.getLexema(), 0, "id");
+                if(registrar){
+                    agregarResultado(token.getLinea(), 10, 1100, DESC_1100, false, token.getLexema(), 0, "id");
+                }
                 return false;
             }
         }else{
             erroresAmbitosCont++;
             erroresAmbitos.put(pilaAmbitos.peek(), erroresAmbitos.get(pilaAmbitos.peek()) + 1);
             listaErrores.add(new Error(540, token.getLinea(), token.getLexema(), TipoError.AMBITO));
-            agregarResultado(token.getLinea(), 10, 1100, DESC_1100, false, token.getLexema(), 0, "id");
+            if(registrar){
+                agregarResultado(token.getLinea(), 10, 1100, DESC_1100, false, token.getLexema(), 0, "id");
+            }
             return false;
         }
-        agregarResultado(token.getLinea(), 10, 1100, DESC_1100, true, token.getLexema(), 0, "id");
+        if(registrar){
+            agregarResultado(token.getLinea(), 10, 1100, DESC_1100, true, token.getLexema(), 0, "id");
+        }
         return true;
     }
 
@@ -1611,6 +1632,14 @@ public class Sintaxis {
         // La asignación cuenta como un temporal Variant en la hoja "Semántica 1".
         temporalesPorLinea.computeIfAbsent(tokenAsignado.getLinea(), k -> new int[9])[Compatibilidad.VARIANT]++;
 
+        // Clave 1080: en la inicialización de un for solo se revisa que id y expresión sean enteros.
+        if(enInicializacionFor()){
+            boolean entera = esEnteroOVariant(tipoVariable) && esEnteroOVariant(tipoResultado);
+            agregarResultado(tokenAsignado.getLinea(), 8, 1080, DESC_1080, entera, tokenAsignado.getLexema(), 565, "id");
+            pilaContextos.peek().inicializacionVerificada = true;
+            return;
+        }
+
         int tabla = -1;
         switch(tokenIgual.getNumeroToken()){
             case -34: tabla = Compatibilidad.SUMA; break;
@@ -1649,13 +1678,15 @@ public class Sintaxis {
         String clase = claseDeSimbolo(tokenAsignado.getLexema());
         boolean recibe = clase == null || clase.equals("Variable") || clase.equals("Parametro") || clase.equals("Arreglo");
         agregarResultado(tokenAsignado.getLinea(), 9, 1090, DESC_1090, recibe, tokenAsignado.getLexema(), 570, "id");
+    }
 
-        // Clave 1080: la inicialización de un for debe ser entera (id y expresión).
-        if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.FOR
-                && pilaContextos.peek().fase == Contexto.FASE_INICIALIZACION){
-            boolean entera = esEnteroOVariant(tipoVariable) && esEnteroOVariant(tipoResultado);
-            agregarResultado(tokenAsignado.getLinea(), 8, 1080, DESC_1080, entera, tokenAsignado.getLexema(), 565, "id");
+    /** Si se está leyendo la inicialización de un for (o el valor 1 de un for de cadenas o arreglos). */
+    private boolean enInicializacionFor() {
+        if(pilaContextos.isEmpty()){
+            return false;
         }
+        Contexto contexto = pilaContextos.peek();
+        return contexto.tipo == Contexto.FOR && contexto.fase == Contexto.FASE_INICIALIZACION && contexto.actual == null;
     }
 
     /** Clase del símbolo (Variable, Parametro, Arreglo, Función...) visible desde el ámbito actual, o null si no existe. */
@@ -1933,14 +1964,14 @@ public class Sintaxis {
         int[] tamaños = buscarDimensiones(id.getLexema());
         int declaradas = tamaños == null ? 0 : tamaños.length;
 
-        boolean mismasDimensiones = declaradas == uso.expresiones.size();
         String topeDimensiones = declaradas > 0 ? String.valueOf(declaradas) : "-";
 
-        // Por cada índice se revisa la cadena 3 -> 4 -> 5.
+        // Por cada índice se revisa la cadena 3 -> 4 -> 5. Un índice que sobra da 1030 ERROR.
         for(int i = 0; i < uso.expresiones.size(); i++){
             Expresion indice = uso.expresiones.get(i);
-            agregarResultado(id.getLinea(), 3, 1030, DESC_REGLA3, mismasDimensiones, id.getLexema(), 557, topeDimensiones);
-            if(!mismasDimensiones || indice.resultado == null){
+            boolean declarada = i < declaradas;
+            agregarResultado(id.getLinea(), 3, 1030, DESC_REGLA3, declarada, id.getLexema(), 557, topeDimensiones);
+            if(!declarada || indice.resultado == null){
                 continue;
             }
             int tipo = Compatibilidad.tipoDeToken(indice.resultado.getNumeroToken());
@@ -1955,6 +1986,9 @@ public class Sintaxis {
             Long valor = EvaluadorConstante.evaluar(indice.tokens);
             boolean enRango = valor == null || (valor >= 0 && valor < tamaños[i]);
             agregarResultado(indice.linea, 5, 1050, DESC_REGLA5, enRango, indice.texto.toString(), 559, Compatibilidad.nombreTipo(tipo));
+        }
+        if(uso.expresiones.size() < declaradas){
+            agregarResultado(id.getLinea(), 3, 1030, DESC_REGLA3, false, id.getLexema(), 557, topeDimensiones); // faltan índices
         }
     }
 
