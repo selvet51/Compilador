@@ -13,6 +13,6 @@ import org.apache.poi.ss.util.CellRangeAddress;
 
 public class Main {
 	public static void main(String[]args) {
-            FrameLexico fl = new FrameLexico("Contadores Tokens");
+            FrameLexico fl = new FrameLexico("Compilador");
 	}
 }
