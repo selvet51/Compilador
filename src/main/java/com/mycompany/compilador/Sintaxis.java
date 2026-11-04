@@ -1445,18 +1445,20 @@ public class Sintaxis {
         
         
         
-        int erroresSintaxis = 0, erroresAmbito = 0, erroresSemantica = 0;
+        int erroresSintaxis = 0, erroresAmbito = 0, erroresSemantica1 = 0, erroresSemantica2 = 0;
         for(Error error: listaErrores){
             switch(error.getTipoError()){
                 case "Sintáxis": erroresSintaxis++; break;
                 case "Ámbitos": erroresAmbito++; break;
-                case "Semántica": erroresSemantica++; break;
+                case "Semántica 1": erroresSemantica1++; break;
+                case "Semántica 2": erroresSemantica2++; break;
                 default: break;
             }
         }
         JOptionPane.showMessageDialog(null, "Hay un total de " + erroresSintaxis + " error(es) de sintáxis.\n"
                 + "Hay un total de " + erroresAmbito + " error(es) de ámbito.\n"
-                + "Hay un total de " + erroresSemantica + " error(es) de semántica.");
+                + "Hay un total de " + erroresSemantica1 + " error(es) de semántica 1.\n"
+                + "Hay un total de " + erroresSemantica2 + " error(es) de semántica 2 (reglas).");
         
         System.out.println("Pila de prefijo: " + pilaPrefijo);
         
@@ -1568,12 +1570,12 @@ public class Sintaxis {
 
     /**
      * Llena la hoja "Semántica 1": una fila por línea con sus temporales, asignaciones y
-     * errores semánticos (547 a 577), y la fila de totales pegada a la última línea.
+     * errores de Semántica 1, y la fila de totales pegada a la última línea.
      */
     private void llenarSemantica() {
         Map<Integer, Integer> erroresPorLinea = new TreeMap<>();
         for(Error error: listaErrores){
-            if(error.getNumeroError() >= 547 && error.getNumeroError() <= 577){
+            if(error.getTipoError().equals("Semántica 1")){
                 erroresPorLinea.merge(error.getLinea(), 1, Integer::sum);
             }
         }
@@ -1647,7 +1649,7 @@ public class Sintaxis {
         if(tabla >= 0){
             int valor = compatibilidad.consultar(tabla, tipoVariable, tipoValor);
             if(valor > 500){
-                listaErrores.add(new Error(valor, tokenAsignado.getLinea(), tokenIgual.getLexema(), TipoError.SEMANTICA));
+                listaErrores.add(new Error(valor, tokenAsignado.getLinea(), tokenIgual.getLexema(), TipoError.SEMANTICA2));
                 tipoValor = Compatibilidad.VARIANT;
                 aceptada = false;
             }else{
@@ -1656,7 +1658,7 @@ public class Sintaxis {
         }
 
         if(!Compatibilidad.cabe(tipoVariable, tipoValor)){
-            listaErrores.add(new Error(555, tokenAsignado.getLinea(), tokenAsignado.getLexema(), TipoError.SEMANTICA));
+            listaErrores.add(new Error(555, tokenAsignado.getLinea(), tokenAsignado.getLexema(), TipoError.SEMANTICA2));
             aceptada = false;
         }
 
@@ -1870,7 +1872,7 @@ public class Sintaxis {
     private void agregarResultado(int linea, int regla, int clave, String descripcion, boolean aceptada, String lexema, int numeroError, String topePila) {
         resultadosReglas.add(new ResultadoRegla(linea, regla, clave, descripcion, aceptada, lexema, pilaAmbitos.peek(), topePila));
         if(!aceptada && numeroError > 0){
-            listaErrores.add(new Error(numeroError, linea, lexema, TipoError.SEMANTICA));
+            listaErrores.add(new Error(numeroError, linea, lexema, TipoError.SEMANTICA2));
         }
     }
 

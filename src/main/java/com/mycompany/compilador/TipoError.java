@@ -8,5 +8,6 @@ public enum TipoError {
 	LÉXICO,
 	SINTÁXIS,
         AMBITO,
-        SEMANTICA
+        SEMANTICA,  // Semántica 1: tipos dentro de las expresiones
+        SEMANTICA2  // Semántica 2: las 16 reglas
 }

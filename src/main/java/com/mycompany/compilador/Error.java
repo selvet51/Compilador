@@ -124,7 +124,8 @@ public class Error {
 			case LÉXICO: return "Léxico";
 			case SINTÁXIS: return "Sintáxis";
                         case AMBITO: return "Ámbitos";
-                        case SEMANTICA: return "Semántica";
+                        case SEMANTICA: return "Semántica 1";
+                        case SEMANTICA2: return "Semántica 2";
 			default: return null;
 		}
 	}

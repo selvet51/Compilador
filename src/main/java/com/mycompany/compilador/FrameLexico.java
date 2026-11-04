@@ -35,6 +35,7 @@ public class FrameLexico extends JFrame implements ActionListener {
     private static final Font FUENTE_TABLA = new Font(Font.SANS_SERIF, Font.PLAIN, 13);
     private static final Color FILA_PAR = Color.WHITE;
     private static final Color FILA_IMPAR = new Color(242, 245, 250);
+    private static final String[] TIPOS_ERROR = {"Léxico", "Sintáxis", "Ámbitos", "Semántica 1", "Semántica 2"};
 
     JPanel panelPrincipal;
 
@@ -205,7 +206,8 @@ public class FrameLexico extends JFrame implements ActionListener {
                 case "Léxico": base = new Color(255, 236, 236); break;
                 case "Sintáxis": base = new Color(255, 244, 226); break;
                 case "Ámbitos": base = new Color(232, 242, 255); break;
-                case "Semántica": base = new Color(240, 234, 255); break;
+                case "Semántica 1": base = new Color(240, 234, 255); break;
+                case "Semántica 2": base = new Color(230, 246, 234); break;
                 default: return super.colorFila(tabla, fila);
             }
             // Las filas impares un poco más oscuras para que se distingan entre sí.
@@ -301,7 +303,19 @@ public class FrameLexico extends JFrame implements ActionListener {
         }
 
         bordeTokens.setTitle("Tokens (" + analizador.getListaTokens().size() + ")");
-        bordeErrores.setTitle("Errores (" + analizador.getListaErrores().size() + ")");
+        int[] porTipo = new int[TIPOS_ERROR.length];
+        for (Error error : analizador.getListaErrores()) {
+            for (int i = 0; i < TIPOS_ERROR.length; i++) {
+                if (TIPOS_ERROR[i].equals(error.getTipoError())) {
+                    porTipo[i]++;
+                }
+            }
+        }
+        StringBuilder titulo = new StringBuilder("Errores (" + analizador.getListaErrores().size() + "):");
+        for (int i = 0; i < TIPOS_ERROR.length; i++) {
+            titulo.append(i == 0 ? "  " : "  ·  ").append(TIPOS_ERROR[i]).append(" ").append(porTipo[i]);
+        }
+        bordeErrores.setTitle(titulo.toString());
         repaint();
 
         botonGuardar.setEnabled(true);
