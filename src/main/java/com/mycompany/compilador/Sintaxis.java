@@ -1310,7 +1310,9 @@ public class Sintaxis {
                 pilaSintactica.pop();
             }else if(topePila == 850){ //CERRAR LLAMADA (REGLAS 15 Y 16)
                 if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.LLAMADA){
-                    verificarLlamada(pilaContextos.pop());
+                    Contexto llamada = pilaContextos.pop();
+                    verificarLlamada(llamada);
+                    marcarLlamadaVacia(llamada);
                 }
                 pilaSintactica.pop();
             }else if(topePila == 851){ //ABRIR UN ARGUMENTO
@@ -2215,12 +2217,17 @@ public class Sintaxis {
             int tipo = parametro.resultado == null ? Compatibilidad.VARIANT : Compatibilidad.tipoDeToken(parametro.resultado.getNumeroToken());
             // La salida de CLEAR, copy o val (void) no sirve como parámetro de nada.
             boolean vacio = parametro.resultado != null && parametro.resultado.getLexema().equals("TVoid");
-            boolean aceptado = tipo == Compatibilidad.VARIANT && !vacio;
+            // null tampoco se acepta como parámetro de una función predefinida.
+            boolean nulo = parametro.tokens.size() == 1 && parametro.tokens.get(0).getNumeroToken() == -71;
+            boolean aceptado = tipo == Compatibilidad.VARIANT && !vacio && !nulo;
             for(int permitido: TIPOS_ENTRADA.get(clave)){
                 aceptado |= tipo == permitido;
             }
-            if(ENTRADA_SOLO_ID.contains(clave)){
-                aceptado &= parametro.tokens.size() == 1 && esTokenId(parametro.tokens.get(0).getNumeroToken());
+            // 2006 y 2007 piden un identificador (también un elemento de arreglo). Una expresión que ya dio
+            // error antes (Variant) se acepta sin volver a penalizarla.
+            boolean variantPorError = tipo == Compatibilidad.VARIANT && !vacio && !nulo && !esIdentificador(parametro.tokens);
+            if(ENTRADA_SOLO_ID.contains(clave) && !variantPorError){
+                aceptado &= esIdentificador(parametro.tokens);
             }
             if(funcion.clave == -85 && i == 2 && aceptado){
                 // val_p3: si es constante solo se permiten 2, 8, 10 o 16.
@@ -2317,6 +2324,47 @@ public class Sintaxis {
                 rowParametro.createCell(3).setCellValue(cuentaParametro[1]);
                 rowParametro.createCell(4).setCellValue(cuentaParametro[2]);
             }
+        }
+    }
+
+    /** Si la expresión es solo un identificador, o un elemento de arreglo (id[...]). */
+    private static boolean esIdentificador(List<Token> tokens) {
+        if(tokens.isEmpty() || !esTokenId(tokens.get(0).getNumeroToken())){
+            return false;
+        }
+        if(tokens.size() == 1){
+            return true;
+        }
+        if(tokens.get(1).getNumeroToken() != -47 || tokens.get(tokens.size() - 1).getNumeroToken() != -48){
+            return false;
+        }
+        int profundidad = 0;
+        for(int i = 1; i < tokens.size(); i++){
+            int numero = tokens.get(i).getNumeroToken();
+            if(numero == -47){
+                profundidad++;
+            }else if(numero == -48){
+                profundidad--;
+                if(profundidad == 0 && i != tokens.size() - 1){
+                    return false; // el corchete de id[...] se cierra antes del final: es una expresión
+                }
+            }
+        }
+        return profundidad == 0;
+    }
+
+    /**
+     * Una llamada a un procedimiento del usuario no devuelve nada: el operando que dejó su id en la
+     * expresión se cambia por un temporal void (TVoid), que ninguna regla acepta.
+     */
+    private void marcarLlamadaVacia(Contexto llamada) {
+        if(llamada.arreglo == null || !insertandoPrefijo || pilaOperandos.isEmpty()){
+            return;
+        }
+        Funcion funcion = buscarFuncion(llamada.arreglo.getLexema());
+        if(funcion != null && funcion.procedimiento && pilaOperandos.peek().getLexema().equals(llamada.arreglo.getLexema())){
+            pilaOperandos.pop();
+            pilaOperandos.push(new Token(Compatibilidad.tokenTemporal(Compatibilidad.VARIANT), "TVoid", llamada.arreglo.getLinea()));
         }
     }
 
