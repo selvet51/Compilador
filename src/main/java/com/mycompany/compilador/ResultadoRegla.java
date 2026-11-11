@@ -12,6 +12,7 @@ public class ResultadoRegla {
 	private String lexema;
 	private int ambito;
 	private String topePila;
+	private String funcion = "-";
 
 	public ResultadoRegla(int linea, int regla, int clave, String descripcion, boolean aceptada, String lexema, int ambito, String topePila) {
 		super();
@@ -58,9 +59,18 @@ public class ResultadoRegla {
 		return topePila;
 	}
 
-	/** "ACEPT" o "ERROR", tal como va en la hoja "Semantica 2-Base". */
+	/** "Acept" o "ERROR", tal como va en la hoja "Semantica 2-Base". */
 	public String getResultado() {
-		return aceptada ? "ACEPT" : "ERROR";
+		return aceptada ? "Acept" : "ERROR";
+	}
+
+	/** Función o parámetro de Semántica 3 (sqrt, sqrt_p1...); "-" en las reglas de Semántica 2. */
+	public String getFuncion() {
+		return funcion;
+	}
+
+	public void setFuncion(String funcion) {
+		this.funcion = funcion;
 	}
 
 	@Override

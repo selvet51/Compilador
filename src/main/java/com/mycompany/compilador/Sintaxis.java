@@ -740,12 +740,13 @@ public class Sintaxis {
         
         //SHEETS DE SEMÁNTICA 2
         sheetSemantica2Base = wb.createSheet("Semantica 2-Base");
-        String[] encabezadoBase = {"Regla", "Tope Pila", "Valor Real", "Linea", "Edo", "Ambito"};
+        String[] encabezadoBase = {"Regla", "Función", "Tope Pila", "Valor Real", "Linea", "Edo", "Ambito"};
         Row rowBase = sheetSemantica2Base.createRow(0);
         for(int c = 0; c < encabezadoBase.length; c++){
             rowBase.createCell(c).setCellValue(encabezadoBase[c]);
         }
         sheetSemantica2Base.setColumnWidth(2, 30 * 256);
+        sheetSemantica2Base.setColumnWidth(3, 30 * 256);
         
         sheetSemantica2Total = wb.createSheet("Semantica 2-Total");
         String[] encabezadoTotal = {"Reglas", "Aparecen", "Aceptada", "Errores"};
@@ -2170,6 +2171,20 @@ public class Sintaxis {
         REGLAS_FUNCION.put(-95, new int[]{2002, 2012});             // sqr
     }
 
+    /** Tope Pila de cada regla de entrada y de salida en la hoja "Semantica 2-Base": los tipos que acepta o genera. */
+    private static final Map<Integer, String> DESC_ENTRADA = Map.of(
+            2002, "TDec/TReal/TExp/id", 2003, "TBin/TDec/TOct/THex/TReal/TExp/id", 2004, "TDec/id",
+            2005, "TCadena/id", 2006, "id TCadena", 2007, "id TBin/TDec/TOct/THex",
+            2008, "TBin/TDec/TOct/THex/TReal/TExp/TBoolean/id", 2009, "TBin/TDec/TOct/THex/id", 2010, "TReal/TExp/id");
+    private static final Map<Integer, String> DESC_SALIDA = Map.of(
+            2011, "TVoid", 2012, "TExp", 2013, "TBin/TDec/TOct/THex/TReal/TExp", 2014, "TDec", 2015, "TCadena",
+            2016, "TBoolean", 2017, "TReal/TExp", 2018, "TBin/TDec/TOct/THex");
+    private static final String[] NOMBRES_TEMPORAL = {"TBin", "TDec", "TOct", "THex", "TReal", "TExp", "TCadena", "TBoolean", "TVariant"};
+
+    private ResultadoRegla ultimoResultado() {
+        return resultadosReglas.get(resultadosReglas.size() - 1);
+    }
+
     /** Valores permitidos en val_p3 cuando es una constante (la base del número). */
     private static final Set<Long> BASES_VAL = Set.of(2L, 8L, 10L, 16L);
 
@@ -2185,10 +2200,11 @@ public class Sintaxis {
             return;
         }
         int linea = funcion.linea;
-        List<String> textos = new ArrayList<>();
+        String nombre = NOMBRES_FUNCION.get(funcion.clave);
 
         if(funcion.clave == -78){
-            agregarResultado(linea, 2001, 2001, "", true, funcion.operador, 578, "-", TipoError.SEMANTICA3);
+            agregarResultado(linea, 2001, 2001, "", true, "-", 578, "Sin parametros", TipoError.SEMANTICA3);
+            ultimoResultado().setFuncion(nombre);
         }
         int tipoPrimero = Compatibilidad.VARIANT;
         for(int i = 0; i < reglas.length - 1 && i < funcion.expresiones.size(); i++){
@@ -2212,10 +2228,11 @@ public class Sintaxis {
             if(i == 0){
                 tipoPrimero = aceptado ? tipo : -1;
             }
-            textos.add(parametro.texto.toString());
-            contarFuncion(NOMBRES_FUNCION.get(funcion.clave) + "_p" + (i + 1), aceptado);
+            contarFuncion(nombre + "_p" + (i + 1), aceptado);
             agregarResultado(parametro.linea, clave, clave, "", aceptado, parametro.texto.toString(),
-                    578 + (clave - 2001), Compatibilidad.nombreTipo(tipo), TipoError.SEMANTICA3);
+                    578 + (clave - 2001), clave == 2004 && funcion.clave == -85 ? "TDec(2,8,10,16)/id" : DESC_ENTRADA.get(clave),
+                    TipoError.SEMANTICA3);
+            ultimoResultado().setFuncion(nombre + "_p" + (i + 1));
         }
 
         // Tipo del temporal de salida.
@@ -2236,14 +2253,15 @@ public class Sintaxis {
         if(vacia){
             temporal = new Token(Compatibilidad.tokenTemporal(Compatibilidad.VARIANT), "TVoid", linea);
         }else{
-            String nombre = Compatibilidad.prefijoTemporal(tipoSalida) + (++contadoresTemporales[tipoSalida]);
-            temporal = new Token(Compatibilidad.tokenTemporal(tipoSalida), nombre, linea);
+            String nombreTemporal = Compatibilidad.prefijoTemporal(tipoSalida) + (++contadoresTemporales[tipoSalida]);
+            temporal = new Token(Compatibilidad.tokenTemporal(tipoSalida), nombreTemporal, linea);
             temporalesPorLinea.computeIfAbsent(linea, k -> new int[9])[tipoSalida]++;
         }
-        String llamada = funcion.operador + (funcion.clave == -78 ? "" : "(" + String.join(", ", textos) + ")");
-        String tope = vacia ? "TVoid" : Compatibilidad.nombreTipo(tipoSalida);
-        contarFuncion(NOMBRES_FUNCION.get(funcion.clave), true);
-        agregarResultado(linea, salida, salida, "", true, llamada, 588, tope, TipoError.SEMANTICA3);
+        String tope = DESC_SALIDA.get(salida);
+        String valorSalida = vacia ? "TVoid" : NOMBRES_TEMPORAL[tipoSalida];
+        contarFuncion(nombre, true);
+        agregarResultado(linea, salida, salida, "", true, valorSalida, 588, tope, TipoError.SEMANTICA3);
+        ultimoResultado().setFuncion(nombre);
 
         if(insertandoPrefijo){
             pilaOperandos.push(temporal);
@@ -2322,11 +2340,12 @@ public class Sintaxis {
         for(ResultadoRegla resultado: ordenados){
             Row row = sheetSemantica2Base.createRow(++fila);
             row.createCell(0).setCellValue(resultado.getClave());
-            row.createCell(1).setCellValue(resultado.getTopePila());
-            row.createCell(2).setCellValue(resultado.getLexema());
-            row.createCell(3).setCellValue(resultado.getLinea());
-            row.createCell(4).setCellValue(resultado.getResultado());
-            row.createCell(5).setCellValue(resultado.getAmbito());
+            row.createCell(1).setCellValue(resultado.getFuncion());
+            row.createCell(2).setCellValue(resultado.getTopePila());
+            row.createCell(3).setCellValue(resultado.getLexema());
+            row.createCell(4).setCellValue(resultado.getLinea());
+            row.createCell(5).setCellValue(resultado.getResultado());
+            row.createCell(6).setCellValue(resultado.getAmbito());
 
             int[] cuenta = conteo.computeIfAbsent(resultado.getClave(), k -> new int[3]);
             cuenta[0]++;
