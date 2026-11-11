@@ -452,11 +452,11 @@ public class Sintaxis {
         producciones.put(45, Arrays.asList());
         producciones.put(46, Arrays.asList(-7, 5, 30));
         producciones.put(47, Arrays.asList());
-        producciones.put(48, Arrays.asList(16, 5, 32));
+        producciones.put(48, Arrays.asList(16, 5, 32, 813));
         producciones.put(49, Arrays.asList());
         producciones.put(50, Arrays.asList(14, 31));
         producciones.put(51, Arrays.asList());
-        producciones.put(52, Arrays.asList(16, 5, 32));
+        producciones.put(52, Arrays.asList(16, 5, 32, 813));
         producciones.put(53, Arrays.asList());
         producciones.put(54, Arrays.asList(-32, 5, -10, 5));
         producciones.put(55, Arrays.asList(829, -1, 811, -60, 830, 28));
@@ -1695,7 +1695,9 @@ public class Sintaxis {
             }
         }
 
-        if(!Compatibilidad.cabe(tipoVariable, tipoValor)){
+        // Una salida void (CLEAR, copy, val) no se puede asignar.
+        boolean vacio = resultado.getLexema().equals("TVoid");
+        if(vacio || !Compatibilidad.cabe(tipoVariable, tipoValor)){
             listaErrores.add(new Error(555, tokenAsignado.getLinea(), tokenAsignado.getLexema(), TipoError.SEMANTICA2));
             aceptada = false;
         }
@@ -2226,7 +2228,8 @@ public class Sintaxis {
                 aceptado = valor == null || BASES_VAL.contains(valor);
             }
             if(i == 0){
-                tipoPrimero = aceptado ? tipo : -1;
+                // Para la salida, un p1 inválido o no declarado (Variant) cuenta como inválido.
+                tipoPrimero = aceptado && tipo != Compatibilidad.VARIANT ? tipo : -1;
             }
             contarFuncion(nombre + "_p" + (i + 1), aceptado);
             agregarResultado(parametro.linea, clave, clave, "", aceptado, parametro.texto.toString(),
@@ -2244,7 +2247,8 @@ public class Sintaxis {
             case 2014: tipoSalida = 1; break;           // Dec
             case 2015: tipoSalida = 6; break;           // Cadena
             case 2016: tipoSalida = 7; break;           // Boolean
-            case 2013: case 2017: tipoSalida = tipoPrimero >= 0 ? tipoPrimero : 5; break; // tipo de p1, o Exp
+            case 2013: tipoSalida = tipoPrimero == 4 || tipoPrimero < 0 ? 5 : tipoPrimero; break; // tipo de p1 (Real da Exp), o Exp
+            case 2017: tipoSalida = tipoPrimero >= 0 ? tipoPrimero : 5; break; // tipo de p1, o Exp
             case 2018: tipoSalida = tipoPrimero >= 0 ? tipoPrimero : 1; break;            // tipo de p1, o Dec
             default: tipoSalida = Compatibilidad.VARIANT; break; // void
         }
