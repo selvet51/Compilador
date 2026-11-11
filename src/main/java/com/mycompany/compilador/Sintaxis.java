@@ -75,7 +75,9 @@ public class Sintaxis {
     private Sheet sheetAmbito;
     private Sheet sheetSimbolos;
     private Sheet sheetSemantica;
-    private Sheet sheetSemantica2Base, sheetSemantica2Total;
+    private Sheet sheetSemantica2Base, sheetSemantica2Total, sheetSemantica3;
+    // Contadores de la hoja "Semántica 3": por función ("pow") y por parámetro ("pow_p1"): {veces, aceptados, errores}.
+    private Map<String, int[]> contadoresFunciones = new HashMap<>();
     private Map<Integer, int[]> temporalesPorLinea = new TreeMap<>();
     private Map<Integer, List<String>> asignacionesPorLinea = new TreeMap<>();
 
@@ -751,6 +753,15 @@ public class Sintaxis {
         for(int c = 0; c < encabezadoTotal.length; c++){
             rowTotal.createCell(c).setCellValue(encabezadoTotal[c]);
         }
+        
+        //SHEET DE SEMÁNTICA 3
+        sheetSemantica3 = wb.createSheet("Semántica 3");
+        String[] encabezadoSemantica3 = {"Función", "Entradas", "Salida", "Aceptados", "Errores"};
+        Row rowSemantica3 = sheetSemantica3.createRow(0);
+        for(int c = 0; c < encabezadoSemantica3.length; c++){
+            rowSemantica3.createCell(c).setCellValue(encabezadoSemantica3[c]);
+        }
+        sheetSemantica3.setColumnWidth(0, 14 * 256);
         
     }
     
@@ -1507,6 +1518,7 @@ public class Sintaxis {
         
         llenarSemantica();
         llenarSemantica2();
+        llenarSemantica3();
 
         Row row2 = sheetSintaxis.createRow(1);
         row2.createCell(0).setCellValue(listaErrores.size());
@@ -2193,6 +2205,7 @@ public class Sintaxis {
             }
             parametrosValidos &= aceptado;
             textos.add(parametro.texto.toString());
+            contarFuncion(NOMBRES_FUNCION.get(funcion.clave) + "_p" + (i + 1), aceptado);
             agregarResultado(parametro.linea, clave, clave, "", aceptado, parametro.texto.toString(),
                     578 + (clave - 2001), Compatibilidad.nombreTipo(tipo), TipoError.SEMANTICA3);
         }
@@ -2223,10 +2236,59 @@ public class Sintaxis {
         }
         String llamada = funcion.operador + (funcion.clave == -78 ? "" : "(" + String.join(", ", textos) + ")");
         String tope = vacia && parametrosValidos ? "TVoid" : Compatibilidad.nombreTipo(tipoSalida);
+        contarFuncion(NOMBRES_FUNCION.get(funcion.clave), parametrosValidos);
         agregarResultado(linea, salida, salida, "", parametrosValidos, llamada, 588, tope, TipoError.SEMANTICA3);
 
         if(insertandoPrefijo){
             pilaOperandos.push(temporal);
+        }
+    }
+
+    /** Nombre de cada función predefinida en la hoja "Semántica 3", en el orden en que se listan. */
+    private static final Map<Integer, String> NOMBRES_FUNCION = new TreeMap<>(Map.ofEntries(
+            Map.entry(-78, "CLEAR"), Map.entry(-90, "chr"), Map.entry(-83, "concat"), Map.entry(-84, "copy"),
+            Map.entry(-88, "cos"), Map.entry(-94, "dec"), Map.entry(-93, "inc"), Map.entry(-80, "pow"),
+            Map.entry(-91, "pred"), Map.entry(-87, "sin"), Map.entry(-95, "sqr"), Map.entry(-79, "sqrt"),
+            Map.entry(-81, "sqrtv"), Map.entry(-86, "str"), Map.entry(-82, "strlen"), Map.entry(-92, "succ"),
+            Map.entry(-89, "tan"), Map.entry(-85, "val")));
+
+    private void contarFuncion(String nombre, boolean aceptado) {
+        int[] cuenta = contadoresFunciones.computeIfAbsent(nombre, k -> new int[3]);
+        cuenta[0]++;
+        cuenta[aceptado ? 1 : 2]++;
+    }
+
+    /**
+     * Llena la hoja "Semántica 3": por cada función una fila con sus llamadas (Salida) y, debajo, una por
+     * parámetro (función_pN) con sus Entradas; en ambas cuántas se aceptaron y cuántas dieron error.
+     */
+    private void llenarSemantica3() {
+        List<String> nombres = new ArrayList<>(NOMBRES_FUNCION.values());
+        Collections.sort(nombres); // CLEAR primero y luego las demás en orden alfabético, como en el ejemplo
+        int fila = 0;
+        for(String nombre: nombres){
+            int token = 0;
+            for(Map.Entry<Integer, String> entrada: NOMBRES_FUNCION.entrySet()){
+                if(entrada.getValue().equals(nombre)){
+                    token = entrada.getKey();
+                }
+            }
+            int[] cuenta = contadoresFunciones.getOrDefault(nombre, new int[3]);
+            Row row = sheetSemantica3.createRow(++fila);
+            row.createCell(0).setCellValue(nombre);
+            row.createCell(2).setCellValue(cuenta[0]);
+            row.createCell(3).setCellValue(cuenta[1]);
+            row.createCell(4).setCellValue(cuenta[2]);
+
+            int parametros = REGLAS_FUNCION.get(token).length - 1;
+            for(int p = 1; p <= parametros; p++){
+                int[] cuentaParametro = contadoresFunciones.getOrDefault(nombre + "_p" + p, new int[3]);
+                Row rowParametro = sheetSemantica3.createRow(++fila);
+                rowParametro.createCell(0).setCellValue(nombre + "_p" + p);
+                rowParametro.createCell(1).setCellValue(cuentaParametro[0]);
+                rowParametro.createCell(3).setCellValue(cuentaParametro[1]);
+                rowParametro.createCell(4).setCellValue(cuentaParametro[2]);
+            }
         }
     }
 

@@ -3,6 +3,7 @@ package com.mycompany.compilador;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Desktop;
 import java.awt.FileDialog;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
@@ -39,7 +40,10 @@ public class FrameLexico extends JFrame implements ActionListener {
 
     JPanel panelPrincipal;
 
-    JButton botonArchivo, botonCompilar, botonGuardar;
+    JButton botonArchivo, botonCompilar, botonGuardar, botonAbrir;
+
+    // Último Excel generado o guardado: es el que abre el botón "Abrir Excel".
+    File ultimoExcel = null;
 
     JTextArea textArea;
 
@@ -108,7 +112,12 @@ public class FrameLexico extends JFrame implements ActionListener {
 
         panelBotones.add(botonArchivo);
         panelBotones.add(botonCompilar);
+        botonAbrir = new JButton("Abrir Excel");
+        botonAbrir.addActionListener(this);
+        botonAbrir.setEnabled(false); // hasta que se compile por primera vez
+
         panelBotones.add(botonGuardar);
+        panelBotones.add(botonAbrir);
 
         panelCodigo.add(panelBotones, BorderLayout.SOUTH);
 
@@ -275,12 +284,32 @@ public class FrameLexico extends JFrame implements ActionListener {
                     entrada.transferTo(salida);
                 }
             }
+            ultimoExcel = destino.getAbsoluteFile();
             JOptionPane.showMessageDialog(this, "Excel guardado en:\n" + destino.getAbsolutePath(),
                     "Guardar Excel", JOptionPane.INFORMATION_MESSAGE);
         } catch (IOException ex) {
             ex.printStackTrace();
             JOptionPane.showMessageDialog(this, "No se pudo guardar el Excel:\n" + ex.getMessage(),
                     "Guardar Excel", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /** Abre el último Excel (el guardado con "Guardar como" o, si no, el de la carpeta del proyecto) con el programa del sistema. */
+    private void abrirExcel() {
+        if (ultimoExcel == null || !ultimoExcel.exists()) {
+            JOptionPane.showMessageDialog(this, "Primero compila el código para generar el Excel.",
+                    "Abrir Excel", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        try {
+            if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
+                throw new IOException("El sistema no permite abrir archivos desde Java.");
+            }
+            Desktop.getDesktop().open(ultimoExcel);
+        } catch (IOException | RuntimeException ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this, "No se pudo abrir el Excel:\n" + ex.getMessage()
+                    + "\n\nEstá en: " + ultimoExcel.getAbsolutePath(), "Abrir Excel", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -319,7 +348,9 @@ public class FrameLexico extends JFrame implements ActionListener {
         bordeErrores.setTitle(titulo.toString());
         repaint();
 
+        ultimoExcel = new File(Lexico.NOMBRE_EXCEL).getAbsoluteFile();
         botonGuardar.setEnabled(true);
+        botonAbrir.setEnabled(true);
         guardarExcel();
     }
 
@@ -332,6 +363,10 @@ public class FrameLexico extends JFrame implements ActionListener {
 
         if (e.getSource() == botonCompilar) {
             compilar();
+        }
+
+        if (e.getSource() == botonAbrir) {
+            abrirExcel();
         }
 
         if (e.getSource() == botonGuardar) {
