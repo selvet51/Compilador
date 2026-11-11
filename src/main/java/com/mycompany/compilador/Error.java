@@ -88,6 +88,17 @@ public class Error {
                         case 575: descripcion = "Un procedimiento no debe tener return."; break;
                         case 576: descripcion = "La cantidad de parámetros no es igual a la declarada."; break;
                         case 577: descripcion = "El tipo del parámetro no es igual al declarado."; break;
+                        case 578: descripcion = "CLEAR no debe tener parámetros."; break;
+                        case 579: descripcion = "El parámetro debe ser decimal, real o exponencial."; break;
+                        case 580: descripcion = "El parámetro debe ser binario, decimal, octal, hexadecimal, real o exponencial."; break;
+                        case 581: descripcion = "El parámetro debe ser decimal."; break;
+                        case 582: descripcion = "El parámetro debe ser cadena."; break;
+                        case 583: descripcion = "El parámetro debe ser un identificador de tipo cadena."; break;
+                        case 584: descripcion = "El parámetro debe ser un identificador binario, decimal, octal o hexadecimal."; break;
+                        case 585: descripcion = "El parámetro debe ser numérico o booleano."; break;
+                        case 586: descripcion = "El parámetro debe ser binario, decimal, octal o hexadecimal."; break;
+                        case 587: descripcion = "El parámetro debe ser real o exponencial."; break;
+                        case 588: descripcion = "La función no puede generar su salida porque un parámetro no es válido."; break;
 			default:  descripcion = "Error no identificado."; break;
 		}
 		this.linea = linea;
@@ -126,6 +137,7 @@ public class Error {
                         case AMBITO: return "Ámbitos";
                         case SEMANTICA: return "Semántica 1";
                         case SEMANTICA2: return "Semántica 2";
+                        case SEMANTICA3: return "Semántica 3";
 			default: return null;
 		}
 	}

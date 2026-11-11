@@ -35,7 +35,7 @@ public class FrameLexico extends JFrame implements ActionListener {
     private static final Font FUENTE_TABLA = new Font(Font.SANS_SERIF, Font.PLAIN, 13);
     private static final Color FILA_PAR = Color.WHITE;
     private static final Color FILA_IMPAR = new Color(242, 245, 250);
-    private static final String[] TIPOS_ERROR = {"Léxico", "Sintáxis", "Ámbitos", "Semántica 1", "Semántica 2"};
+    private static final String[] TIPOS_ERROR = {"Léxico", "Sintáxis", "Ámbitos", "Semántica 1", "Semántica 2", "Semántica 3"};
 
     JPanel panelPrincipal;
 
@@ -208,6 +208,7 @@ public class FrameLexico extends JFrame implements ActionListener {
                 case "Ámbitos": base = new Color(232, 242, 255); break;
                 case "Semántica 1": base = new Color(240, 234, 255); break;
                 case "Semántica 2": base = new Color(230, 246, 234); break;
+                case "Semántica 3": base = new Color(255, 249, 219); break;
                 default: return super.colorFila(tabla, fila);
             }
             // Las filas impares un poco más oscuras para que se distingan entre sí.

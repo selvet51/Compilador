@@ -9,5 +9,6 @@ public enum TipoError {
 	SINTÁXIS,
         AMBITO,
         SEMANTICA,  // Semántica 1: tipos dentro de las expresiones
-        SEMANTICA2  // Semántica 2: las 16 reglas
+        SEMANTICA2, // Semántica 2: las 16 reglas
+        SEMANTICA3  // Semántica 3: funciones predefinidas del lenguaje
 }

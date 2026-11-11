@@ -144,7 +144,7 @@ public class Sintaxis {
 
     /** Condición (clave 1010-1013) o uso de un arreglo (id declarado y sus índices). */
     private static class Contexto {
-        static final int CONDICION = 0, ARREGLO = 1, UNARIO = 2, SWITCH = 3, FOR = 4, RETURN = 5, LLAMADA = 6;
+        static final int CONDICION = 0, ARREGLO = 1, UNARIO = 2, SWITCH = 3, FOR = 4, RETURN = 5, LLAMADA = 6, FUNCION_PREDEFINIDA = 7;
         static final int FASE_INICIALIZACION = 0, FASE_COMPARACION = 1, FASE_INCREMENTO = 2;
         int tipo = CONDICION;
         String operador;
@@ -512,24 +512,24 @@ public class Sintaxis {
         producciones.put(107, Arrays.asList(-107, -10, 13, 18));
         producciones.put(108, Arrays.asList(-108, 836, 5, 837, -10, 13, 38));
         producciones.put(109, Arrays.asList(820, -47, 822, 5, 823, 40, -48, 821));
-        producciones.put(110, Arrays.asList(-78));
-        producciones.put(111, Arrays.asList(-79, -49, 5, -50));
-        producciones.put(112, Arrays.asList(-80, -49, 5, -7, 5, -50));
-        producciones.put(113, Arrays.asList(-81, -49, 5, -7, 5, -50));
-        producciones.put(114, Arrays.asList(-82, -49, 5, -50));
-        producciones.put(115, Arrays.asList(-83, -49, 5, -50));
-        producciones.put(116, Arrays.asList(-84, -49, 5, -7, 5, -50));
-        producciones.put(117, Arrays.asList(-85, -49, 5, -7, 5, -7, 5, -50));
-        producciones.put(118, Arrays.asList(-86, -49, 5, -7, 5, -50));
-        producciones.put(119, Arrays.asList(-87, -49, 5, -50));
-        producciones.put(120, Arrays.asList(-88, -49, 5, -50));
-        producciones.put(121, Arrays.asList(-89, -49, 5, -50));
-        producciones.put(122, Arrays.asList(-90, -49, 5, -50));
-        producciones.put(123, Arrays.asList(-91, -49, 5, -50));
-        producciones.put(124, Arrays.asList(-92, -49, 5, -50));
-        producciones.put(125, Arrays.asList(-93, -49, 5, -50));
-        producciones.put(126, Arrays.asList(-94, -49, 5, -50));
-        producciones.put(127, Arrays.asList(-95, -49, 5, -50));
+        producciones.put(110, Arrays.asList(853, -78, 856));
+        producciones.put(111, Arrays.asList(853, -79, -49, 854, 5, 855, -50, 856));
+        producciones.put(112, Arrays.asList(853, -80, -49, 854, 5, 855, -7, 854, 5, 855, -50, 856));
+        producciones.put(113, Arrays.asList(853, -81, -49, 854, 5, 855, -7, 854, 5, 855, -50, 856));
+        producciones.put(114, Arrays.asList(853, -82, -49, 854, 5, 855, -50, 856));
+        producciones.put(115, Arrays.asList(853, -83, -49, 854, 5, 855, -7, 854, 5, 855, -50, 856));
+        producciones.put(116, Arrays.asList(853, -84, -49, 854, 5, 855, -7, 854, 5, 855, -50, 856));
+        producciones.put(117, Arrays.asList(853, -85, -49, 854, 5, 855, -7, 854, 5, 855, -7, 854, 5, 855, -50, 856));
+        producciones.put(118, Arrays.asList(853, -86, -49, 854, 5, 855, -7, 854, 5, 855, -50, 856));
+        producciones.put(119, Arrays.asList(853, -87, -49, 854, 5, 855, -50, 856));
+        producciones.put(120, Arrays.asList(853, -88, -49, 854, 5, 855, -50, 856));
+        producciones.put(121, Arrays.asList(853, -89, -49, 854, 5, 855, -50, 856));
+        producciones.put(122, Arrays.asList(853, -90, -49, 854, 5, 855, -50, 856));
+        producciones.put(123, Arrays.asList(853, -91, -49, 854, 5, 855, -50, 856));
+        producciones.put(124, Arrays.asList(853, -92, -49, 854, 5, 855, -50, 856));
+        producciones.put(125, Arrays.asList(853, -93, -49, 854, 5, 855, -50, 856));
+        producciones.put(126, Arrays.asList(853, -94, -49, 854, 5, 855, -50, 856));
+        producciones.put(127, Arrays.asList(853, -95, -49, 854, 5, 855, -50, 856));
         producciones.put(128, Arrays.asList(817, -33, 812));
         producciones.put(129, Arrays.asList(817, -34, 812));
         producciones.put(130, Arrays.asList(817, -35, 812));
@@ -1306,6 +1306,29 @@ public class Sintaxis {
                     abrirExpresion(pilaContextos.peek(), tokenActual.getLinea());
                 }
                 pilaSintactica.pop();
+            }else if(topePila == 853){ //ABRIR FUNCIÓN PREDEFINIDA (SEMÁNTICA 3); el token actual es su nombre
+                Contexto funcion = new Contexto();
+                funcion.tipo = Contexto.FUNCION_PREDEFINIDA;
+                funcion.clave = tokenActual.getNumeroToken();
+                funcion.operador = tokenActual.getLexema();
+                funcion.linea = tokenActual.getLinea();
+                pilaContextos.push(funcion);
+                pilaSintactica.pop();
+            }else if(topePila == 854){ //ABRIR UN PARÁMETRO DE LA FUNCIÓN PREDEFINIDA
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.FUNCION_PREDEFINIDA){
+                    abrirExpresion(pilaContextos.peek(), tokenActual.getLinea());
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 855){ //CERRAR UN PARÁMETRO DE LA FUNCIÓN PREDEFINIDA
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.FUNCION_PREDEFINIDA){
+                    cerrarExpresion(pilaContextos.peek());
+                }
+                pilaSintactica.pop();
+            }else if(topePila == 856){ //CERRAR FUNCIÓN PREDEFINIDA (SEMÁNTICA 3)
+                if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.FUNCION_PREDEFINIDA){
+                    verificarFuncionPredefinida(pilaContextos.pop());
+                }
+                pilaSintactica.pop();
             }else if(topePila == 852){ //CERRAR UN ARGUMENTO
                 if(!pilaContextos.isEmpty() && pilaContextos.peek().tipo == Contexto.LLAMADA){
                     cerrarExpresion(pilaContextos.peek());
@@ -1445,20 +1468,22 @@ public class Sintaxis {
         
         
         
-        int erroresSintaxis = 0, erroresAmbito = 0, erroresSemantica1 = 0, erroresSemantica2 = 0;
+        int erroresSintaxis = 0, erroresAmbito = 0, erroresSemantica1 = 0, erroresSemantica2 = 0, erroresSemantica3 = 0;
         for(Error error: listaErrores){
             switch(error.getTipoError()){
                 case "Sintáxis": erroresSintaxis++; break;
                 case "Ámbitos": erroresAmbito++; break;
                 case "Semántica 1": erroresSemantica1++; break;
                 case "Semántica 2": erroresSemantica2++; break;
+                case "Semántica 3": erroresSemantica3++; break;
                 default: break;
             }
         }
         JOptionPane.showMessageDialog(null, "Hay un total de " + erroresSintaxis + " error(es) de sintáxis.\n"
                 + "Hay un total de " + erroresAmbito + " error(es) de ámbito.\n"
                 + "Hay un total de " + erroresSemantica1 + " error(es) de semántica 1.\n"
-                + "Hay un total de " + erroresSemantica2 + " error(es) de semántica 2 (reglas).");
+                + "Hay un total de " + erroresSemantica2 + " error(es) de semántica 2 (reglas).\n"
+                + "Hay un total de " + erroresSemantica3 + " error(es) de semántica 3 (funciones).");
         
         System.out.println("Pila de prefijo: " + pilaPrefijo);
         
@@ -1870,9 +1895,15 @@ public class Sintaxis {
      * se evaluó (id, tipo del temporal, nº de dimensiones o parámetros...) para la hoja "Semantica 2-Base".
      */
     private void agregarResultado(int linea, int regla, int clave, String descripcion, boolean aceptada, String lexema, int numeroError, String topePila) {
+        agregarResultado(linea, regla, clave, descripcion, aceptada, lexema, numeroError, topePila, TipoError.SEMANTICA2);
+    }
+
+    /** Igual, indicando el tipo del error (Semántica 2 para las 16 reglas, Semántica 3 para las funciones predefinidas). */
+    private void agregarResultado(int linea, int regla, int clave, String descripcion, boolean aceptada, String lexema,
+            int numeroError, String topePila, TipoError tipoError) {
         resultadosReglas.add(new ResultadoRegla(linea, regla, clave, descripcion, aceptada, lexema, pilaAmbitos.peek(), topePila));
         if(!aceptada && numeroError > 0){
-            listaErrores.add(new Error(numeroError, linea, lexema, TipoError.SEMANTICA2));
+            listaErrores.add(new Error(numeroError, linea, lexema, tipoError));
         }
     }
 
@@ -2086,7 +2117,123 @@ public class Sintaxis {
     }
 
     private static final int[] CLAVES = {1010, 1011, 1012, 1013, 1020, 1021, 1022, 1030, 1040, 1050, 1060, 1061, 1070,
-        1080, 1081, 1082, 1083, 1084, 1090, 1100, 1110, 1120, 1130, 1131, 1140, 1150, 1160};
+        1080, 1081, 1082, 1083, 1084, 1090, 1100, 1110, 1120, 1130, 1131, 1140, 1150, 1160,
+        2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018};
+
+    // ===== Semántica 3: funciones predefinidas (resources/TablaFunciones.xlsx) =====
+
+    /** Tipos permitidos por cada regla de entrada (índices de Compatibilidad: 0 Bin ... 7 Boolean). */
+    private static final Map<Integer, int[]> TIPOS_ENTRADA = new HashMap<>();
+    /** Reglas de entrada en las que el parámetro tiene que ser un identificador (no constante ni expresión). */
+    private static final Set<Integer> ENTRADA_SOLO_ID = Set.of(2006, 2007);
+    /** Por cada token de función: la regla de entrada de cada parámetro y, al final, la regla de salida. */
+    private static final Map<Integer, int[]> REGLAS_FUNCION = new HashMap<>();
+    static {
+        TIPOS_ENTRADA.put(2002, new int[]{1, 4, 5});
+        TIPOS_ENTRADA.put(2003, new int[]{0, 1, 2, 3, 4, 5});
+        TIPOS_ENTRADA.put(2004, new int[]{1});
+        TIPOS_ENTRADA.put(2005, new int[]{6});
+        TIPOS_ENTRADA.put(2006, new int[]{6});
+        TIPOS_ENTRADA.put(2007, new int[]{0, 1, 2, 3});
+        TIPOS_ENTRADA.put(2008, new int[]{0, 1, 2, 3, 4, 5, 7});
+        TIPOS_ENTRADA.put(2009, new int[]{0, 1, 2, 3});
+        TIPOS_ENTRADA.put(2010, new int[]{4, 5});
+
+        REGLAS_FUNCION.put(-78, new int[]{2011});                   // CLEAR (sin parámetros: 2001)
+        REGLAS_FUNCION.put(-79, new int[]{2002, 2012});             // SQRT
+        REGLAS_FUNCION.put(-80, new int[]{2003, 2004, 2013});       // POW
+        REGLAS_FUNCION.put(-81, new int[]{2002, 2004, 2012});       // SQRTV
+        REGLAS_FUNCION.put(-82, new int[]{2005, 2014});             // STRLEN
+        REGLAS_FUNCION.put(-83, new int[]{2005, 2005, 2015});       // concat
+        REGLAS_FUNCION.put(-84, new int[]{2006, 2005, 2011});       // copy
+        REGLAS_FUNCION.put(-85, new int[]{2007, 2007, 2004, 2011}); // val
+        REGLAS_FUNCION.put(-86, new int[]{2008, 2006, 2016});       // str
+        REGLAS_FUNCION.put(-87, new int[]{2002, 2012});             // sin
+        REGLAS_FUNCION.put(-88, new int[]{2002, 2012});             // cos
+        REGLAS_FUNCION.put(-89, new int[]{2002, 2012});             // tan
+        REGLAS_FUNCION.put(-90, new int[]{2009, 2015});             // chr
+        REGLAS_FUNCION.put(-91, new int[]{2010, 2017});             // pred
+        REGLAS_FUNCION.put(-92, new int[]{2010, 2017});             // succ
+        REGLAS_FUNCION.put(-93, new int[]{2009, 2018});             // inc
+        REGLAS_FUNCION.put(-94, new int[]{2009, 2018});             // dec
+        REGLAS_FUNCION.put(-95, new int[]{2002, 2012});             // sqr
+    }
+
+    /**
+     * Verifica una llamada a una función predefinida: cada parámetro contra su regla de entrada
+     * (2001-2010) y luego la salida (2011-2018). Si un parámetro falla, la salida da ERROR y su temporal
+     * es Variant. El temporal de salida queda como operando de la expresión de afuera.
+     */
+    private void verificarFuncionPredefinida(Contexto funcion) {
+        int[] reglas = REGLAS_FUNCION.get(funcion.clave);
+        if(reglas == null){
+            return;
+        }
+        int linea = funcion.linea;
+        List<String> textos = new ArrayList<>();
+        boolean parametrosValidos = true;
+
+        if(funcion.clave == -78){
+            agregarResultado(linea, 2001, 2001, "", true, funcion.operador, 578, "-", TipoError.SEMANTICA3);
+        }
+        int tipoPrimero = Compatibilidad.VARIANT;
+        for(int i = 0; i < reglas.length - 1 && i < funcion.expresiones.size(); i++){
+            Expresion parametro = funcion.expresiones.get(i);
+            int clave = reglas[i];
+            int tipo = parametro.resultado == null ? Compatibilidad.VARIANT : Compatibilidad.tipoDeToken(parametro.resultado.getNumeroToken());
+            if(i == 0){
+                tipoPrimero = tipo;
+            }
+            boolean aceptado = tipo == Compatibilidad.VARIANT;
+            for(int permitido: TIPOS_ENTRADA.get(clave)){
+                aceptado |= tipo == permitido;
+            }
+            if(ENTRADA_SOLO_ID.contains(clave)){
+                aceptado &= parametro.tokens.size() == 1 && esTokenId(parametro.tokens.get(0).getNumeroToken());
+            }
+            parametrosValidos &= aceptado;
+            textos.add(parametro.texto.toString());
+            agregarResultado(parametro.linea, clave, clave, "", aceptado, parametro.texto.toString(),
+                    578 + (clave - 2001), Compatibilidad.nombreTipo(tipo), TipoError.SEMANTICA3);
+        }
+
+        // Tipo del temporal de salida.
+        int salida = reglas[reglas.length - 1];
+        boolean vacia = salida == 2011;
+        int tipoSalida;
+        switch(salida){
+            case 2012: tipoSalida = 5; break;           // Exp
+            case 2014: tipoSalida = 1; break;           // Dec
+            case 2015: tipoSalida = 6; break;           // Cadena
+            case 2016: tipoSalida = 7; break;           // Boolean
+            case 2013: case 2017: case 2018: tipoSalida = tipoPrimero; break; // del tipo del parámetro 1
+            default: tipoSalida = Compatibilidad.VARIANT; break; // void
+        }
+        if(!parametrosValidos){
+            tipoSalida = Compatibilidad.VARIANT;
+        }
+
+        Token temporal;
+        if(vacia && parametrosValidos){
+            temporal = new Token(Compatibilidad.tokenTemporal(Compatibilidad.VARIANT), "TVoid", linea);
+        }else{
+            String nombre = Compatibilidad.prefijoTemporal(tipoSalida) + (++contadoresTemporales[tipoSalida]);
+            temporal = new Token(Compatibilidad.tokenTemporal(tipoSalida), nombre, linea);
+            temporalesPorLinea.computeIfAbsent(linea, k -> new int[9])[tipoSalida]++;
+        }
+        String llamada = funcion.operador + (funcion.clave == -78 ? "" : "(" + String.join(", ", textos) + ")");
+        String tope = vacia && parametrosValidos ? "TVoid" : Compatibilidad.nombreTipo(tipoSalida);
+        agregarResultado(linea, salida, salida, "", parametrosValidos, llamada, 588, tope, TipoError.SEMANTICA3);
+
+        if(insertandoPrefijo){
+            pilaOperandos.push(temporal);
+        }
+    }
+
+    /** Si el token es un identificador (con prefijo de tipo o sin prefijo). */
+    private static boolean esTokenId(int numeroToken) {
+        return (numeroToken <= -60 && numeroToken >= -67) || numeroToken == -109;
+    }
 
     /** Nombre del tipo sin la "T" de temporal: Bin, Dec, ... Variant. */
     private static String nombreTipoCorto(int tipo) {
