@@ -1,0 +1,5 @@
+com\mycompany\compilador\EvaluadorConstante.class
+com\mycompany\compilador\ResultadoRegla.class
+com\mycompany\compilador\Sintaxis$Expresion.class
+com\mycompany\compilador\Sintaxis$Funcion.class
+com\mycompany\compilador\Sintaxis$Contexto.class

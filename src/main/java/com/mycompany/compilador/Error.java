@@ -57,6 +57,48 @@ public class Error {
                         case 540: descripcion = "No se ha encontrado el símbolo declarado."; break;
                         case 541: descripcion = "El símbolo no se encuentra dentro del ámbito correspondiente."; break;
                         case 542: descripcion = "El símbolo ya estaba declarado anteriormente."; break;
+                        case 547: descripcion = "Tipos incompatibles en la suma."; break;
+                        case 548: descripcion = "Tipos incompatibles en la resta."; break;
+                        case 549: descripcion = "Tipos incompatibles en la multiplicación."; break;
+                        case 550: descripcion = "Tipos incompatibles en la división."; break;
+                        case 551: descripcion = "Tipos incompatibles en la comparación relacional."; break;
+                        case 552: descripcion = "Tipos incompatibles en la operación lógica."; break;
+                        case 553: descripcion = "Tipos incompatibles en la comparación de igualdad."; break;
+                        case 554: descripcion = "Tipos incompatibles en la operación de resto."; break;
+                        case 555: descripcion = "El resultado de la expresión no cabe en la variable."; break;
+                        case 556: descripcion = "La expresión de la condición debe ser lógica."; break;
+                        case 557: descripcion = "La cantidad de dimensiones usadas no es igual a la declarada."; break;
+                        case 558: descripcion = "La expresión del índice del arreglo debe ser entera."; break;
+                        case 559: descripcion = "El índice está fuera del rango declarado del arreglo."; break;
+                        case 560: descripcion = "La expresión del switch debe ser cadena o entera."; break;
+                        case 561: descripcion = "El caso debe ser cadena o entero y del mismo tipo que la expresión del switch."; break;
+                        case 562: descripcion = "El operador ++ o -- solo se puede usar con un identificador entero."; break;
+                        case 563: descripcion = "El operador ! solo se puede usar con un valor lógico."; break;
+                        case 564: descripcion = "El operador ~ solo se puede usar con un valor decimal, octal, binario o hexadecimal."; break;
+                        case 565: descripcion = "La inicialización del for debe ser entera."; break;
+                        case 566: descripcion = "La comparación del for debe ser lógica."; break;
+                        case 567: descripcion = "El incremento o decremento del for debe ser sobre un identificador entero."; break;
+                        case 568: descripcion = "En el for de cadenas, el valor 1 debe ser entero."; break;
+                        case 569: descripcion = "En el for de arreglos, el valor 2 debe ser un arreglo del mismo tipo que el valor 1."; break;
+                        case 570: descripcion = "El identificador no puede recibir un valor (solo variable, parámetro o arreglo)."; break;
+                        case 571: descripcion = "El identificador del procedimiento debe ser de clase procedimiento."; break;
+                        case 572: descripcion = "El identificador de la función debe ser de clase función."; break;
+                        case 573: descripcion = "La función debe tener por lo menos un return."; break;
+                        case 574: descripcion = "El return debe ser del mismo tipo que la función."; break;
+                        case 575: descripcion = "Un procedimiento no debe tener return."; break;
+                        case 576: descripcion = "La cantidad de parámetros no es igual a la declarada."; break;
+                        case 577: descripcion = "El tipo del parámetro no es igual al declarado."; break;
+                        case 578: descripcion = "CLEAR no debe tener parámetros."; break;
+                        case 579: descripcion = "El parámetro debe ser decimal, real o exponencial."; break;
+                        case 580: descripcion = "El parámetro debe ser binario, decimal, octal, hexadecimal, real o exponencial."; break;
+                        case 581: descripcion = "El parámetro debe ser decimal."; break;
+                        case 582: descripcion = "El parámetro debe ser cadena."; break;
+                        case 583: descripcion = "El parámetro debe ser un identificador de tipo cadena."; break;
+                        case 584: descripcion = "El parámetro debe ser un identificador binario, decimal, octal o hexadecimal."; break;
+                        case 585: descripcion = "El parámetro debe ser numérico o booleano."; break;
+                        case 586: descripcion = "El parámetro debe ser binario, decimal, octal o hexadecimal."; break;
+                        case 587: descripcion = "El parámetro debe ser real o exponencial."; break;
+                        case 588: descripcion = "La función no puede generar su salida porque un parámetro no es válido."; break;
 			default:  descripcion = "Error no identificado."; break;
 		}
 		this.linea = linea;
@@ -93,6 +135,9 @@ public class Error {
 			case LÉXICO: return "Léxico";
 			case SINTÁXIS: return "Sintáxis";
                         case AMBITO: return "Ámbitos";
+                        case SEMANTICA: return "Semántica 1";
+                        case SEMANTICA2: return "Semántica 2";
+                        case SEMANTICA3: return "Semántica 3";
 			default: return null;
 		}
 	}
