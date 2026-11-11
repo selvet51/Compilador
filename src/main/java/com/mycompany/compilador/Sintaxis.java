@@ -2129,8 +2129,7 @@ public class Sintaxis {
     }
 
     private static final int[] CLAVES = {1010, 1011, 1012, 1013, 1020, 1021, 1022, 1030, 1040, 1050, 1060, 1061, 1070,
-        1080, 1081, 1082, 1083, 1084, 1090, 1100, 1110, 1120, 1130, 1131, 1140, 1150, 1160,
-        2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018};
+        1080, 1081, 1082, 1083, 1084, 1090, 1100, 1110, 1120, 1130, 1131, 1140, 1150, 1160};
 
     // ===== Semántica 3: funciones predefinidas (resources/TablaFunciones.xlsx) =====
 
@@ -2171,10 +2170,14 @@ public class Sintaxis {
         REGLAS_FUNCION.put(-95, new int[]{2002, 2012});             // sqr
     }
 
+    /** Valores permitidos en val_p3 cuando es una constante (la base del número). */
+    private static final Set<Long> BASES_VAL = Set.of(2L, 8L, 10L, 16L);
+
     /**
      * Verifica una llamada a una función predefinida: cada parámetro contra su regla de entrada
-     * (2001-2010) y luego la salida (2011-2018). Si un parámetro falla, la salida da ERROR y su temporal
-     * es Variant. El temporal de salida queda como operando de la expresión de afuera.
+     * (2001-2010) y luego la salida (2011-2018), que siempre se acepta. Si el parámetro 1 no es válido,
+     * pow, pred y succ devuelven Exp, e inc y dec devuelven Dec. El temporal de salida queda como
+     * operando de la expresión de afuera.
      */
     private void verificarFuncionPredefinida(Contexto funcion) {
         int[] reglas = REGLAS_FUNCION.get(funcion.clave);
@@ -2183,7 +2186,6 @@ public class Sintaxis {
         }
         int linea = funcion.linea;
         List<String> textos = new ArrayList<>();
-        boolean parametrosValidos = true;
 
         if(funcion.clave == -78){
             agregarResultado(linea, 2001, 2001, "", true, funcion.operador, 578, "-", TipoError.SEMANTICA3);
@@ -2193,17 +2195,23 @@ public class Sintaxis {
             Expresion parametro = funcion.expresiones.get(i);
             int clave = reglas[i];
             int tipo = parametro.resultado == null ? Compatibilidad.VARIANT : Compatibilidad.tipoDeToken(parametro.resultado.getNumeroToken());
-            if(i == 0){
-                tipoPrimero = tipo;
-            }
-            boolean aceptado = tipo == Compatibilidad.VARIANT;
+            // La salida de CLEAR, copy o val (void) no sirve como parámetro de nada.
+            boolean vacio = parametro.resultado != null && parametro.resultado.getLexema().equals("TVoid");
+            boolean aceptado = tipo == Compatibilidad.VARIANT && !vacio;
             for(int permitido: TIPOS_ENTRADA.get(clave)){
                 aceptado |= tipo == permitido;
             }
             if(ENTRADA_SOLO_ID.contains(clave)){
                 aceptado &= parametro.tokens.size() == 1 && esTokenId(parametro.tokens.get(0).getNumeroToken());
             }
-            parametrosValidos &= aceptado;
+            if(funcion.clave == -85 && i == 2 && aceptado){
+                // val_p3: si es constante solo se permiten 2, 8, 10 o 16.
+                Long valor = EvaluadorConstante.evaluar(parametro.tokens);
+                aceptado = valor == null || BASES_VAL.contains(valor);
+            }
+            if(i == 0){
+                tipoPrimero = aceptado ? tipo : -1;
+            }
             textos.add(parametro.texto.toString());
             contarFuncion(NOMBRES_FUNCION.get(funcion.clave) + "_p" + (i + 1), aceptado);
             agregarResultado(parametro.linea, clave, clave, "", aceptado, parametro.texto.toString(),
@@ -2219,15 +2227,13 @@ public class Sintaxis {
             case 2014: tipoSalida = 1; break;           // Dec
             case 2015: tipoSalida = 6; break;           // Cadena
             case 2016: tipoSalida = 7; break;           // Boolean
-            case 2013: case 2017: case 2018: tipoSalida = tipoPrimero; break; // del tipo del parámetro 1
+            case 2013: case 2017: tipoSalida = tipoPrimero >= 0 ? tipoPrimero : 5; break; // tipo de p1, o Exp
+            case 2018: tipoSalida = tipoPrimero >= 0 ? tipoPrimero : 1; break;            // tipo de p1, o Dec
             default: tipoSalida = Compatibilidad.VARIANT; break; // void
-        }
-        if(!parametrosValidos){
-            tipoSalida = Compatibilidad.VARIANT;
         }
 
         Token temporal;
-        if(vacia && parametrosValidos){
+        if(vacia){
             temporal = new Token(Compatibilidad.tokenTemporal(Compatibilidad.VARIANT), "TVoid", linea);
         }else{
             String nombre = Compatibilidad.prefijoTemporal(tipoSalida) + (++contadoresTemporales[tipoSalida]);
@@ -2235,9 +2241,9 @@ public class Sintaxis {
             temporalesPorLinea.computeIfAbsent(linea, k -> new int[9])[tipoSalida]++;
         }
         String llamada = funcion.operador + (funcion.clave == -78 ? "" : "(" + String.join(", ", textos) + ")");
-        String tope = vacia && parametrosValidos ? "TVoid" : Compatibilidad.nombreTipo(tipoSalida);
-        contarFuncion(NOMBRES_FUNCION.get(funcion.clave), parametrosValidos);
-        agregarResultado(linea, salida, salida, "", parametrosValidos, llamada, 588, tope, TipoError.SEMANTICA3);
+        String tope = vacia ? "TVoid" : Compatibilidad.nombreTipo(tipoSalida);
+        contarFuncion(NOMBRES_FUNCION.get(funcion.clave), true);
+        agregarResultado(linea, salida, salida, "", true, llamada, 588, tope, TipoError.SEMANTICA3);
 
         if(insertandoPrefijo){
             pilaOperandos.push(temporal);
